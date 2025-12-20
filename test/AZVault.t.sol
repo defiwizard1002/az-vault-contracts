@@ -3,17 +3,17 @@ pragma solidity ^0.8.25;
 
 import {Test, console} from "forge-std/Test.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
-import {AZVault, ValidatorInfo, WithdrawAction, TokenInfo} from "../src/AZVault.sol";
-import {AZVaultV2} from "./mock/AZVaultV2.sol";
+import {AssetVault, ValidatorInfo, WithdrawAction, TokenInfo} from "../src/AssetVault.sol";
+import {AssetVaultV2} from "./mock/AssetVaultV2.sol";
 import {MockERC20} from "./mock/MockERC20.sol";
 import {MockPriceFeed} from "./mock/MockPriceFeed.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 
-contract AZVaultTest is Test {
-    AZVault public vault;
-    AZVault public implementation;
+contract AssetVaultTest is Test {
+    AssetVault public vault;
+    AssetVault public implementation;
     MockERC20 public token1;
     MockERC20 public token2;
     MockPriceFeed public priceFeed1;
@@ -58,12 +58,12 @@ contract AZVaultTest is Test {
         console.log("validator3", validator3);
 
         // Deploy implementation
-        implementation = new AZVault();
+        implementation = new AssetVault();
 
         // Deploy proxy with initialization
-        bytes memory initData = abi.encodeWithSelector(AZVault.initialize.selector);
+        bytes memory initData = abi.encodeWithSelector(AssetVault.initialize.selector);
         ERC1967Proxy proxy = new ERC1967Proxy(address(implementation), initData);
-        vault = AZVault(payable(address(proxy)));
+        vault = AssetVault(payable(address(proxy)));
 
         // Setup roles
         vm.startPrank(address(this));
@@ -249,14 +249,14 @@ contract AZVaultTest is Test {
         uint256 limitBefore = vault.hourlyWithdrawLimit();
         
         // Deploy new implementation
-        AZVaultV2 implementationV2 = new AZVaultV2();
+        AssetVaultV2 implementationV2 = new AssetVaultV2();
         
         // Upgrade
         vm.prank(upgradeRole);
         vault.upgradeToAndCall(address(implementationV2), "");
         
         // Cast to V2
-        AZVaultV2 vaultV2 = AZVaultV2(payable(address(vault)));
+        AssetVaultV2 vaultV2 = AssetVaultV2(payable(address(vault)));
         
         // Verify state preserved
         assertEq(vaultV2.hourlyWithdrawLimit(), limitBefore);
@@ -267,7 +267,7 @@ contract AZVaultTest is Test {
     }
 
     function test_Upgrade_OnlyUpgradeRole() public {
-        AZVaultV2 implementationV2 = new AZVaultV2();
+        AssetVaultV2 implementationV2 = new AssetVaultV2();
         
         vm.expectRevert();
         vm.prank(user);
@@ -281,7 +281,7 @@ contract AZVaultTest is Test {
         token1.approve(address(vault), 100e18);
 
         vm.expectEmit(true, true, false, true);
-        emit AZVault.Deposit(user, address(token1), 100e18);
+        emit AssetVault.Deposit(user, address(token1), 100e18);
 
         vault.deposit(address(token1), 100e18);
         vm.stopPrank();
@@ -293,7 +293,7 @@ contract AZVaultTest is Test {
         vm.deal(user, 10e18);
         
         vm.expectEmit(true, true, false, true, address(vault));
-        emit AZVault.Deposit(user, address(0), 10e18);
+        emit AssetVault.Deposit(user, address(0), 10e18);
         
         vm.prank(user);
         vault.deposit{value: 10e18}(address(0), 10e18);
@@ -391,7 +391,7 @@ contract AZVaultTest is Test {
         });
 
         vm.expectEmit(true, true, true, true);
-        emit AZVault.Withdraw(id, receiver, address(token1), amount, fee);
+        emit AssetVault.Withdraw(id, receiver, address(token1), amount, fee);
 
         vm.prank(operator);
         vault.withdraw(id, validators, action, signatures);
@@ -521,7 +521,7 @@ contract AZVaultTest is Test {
         });
 
         vm.expectEmit(true, true, false, true);
-        emit AZVault.WithdrawPaused(operator, address(token1), amount, 120000e8);
+        emit AssetVault.WithdrawPaused(operator, address(token1), amount, 120000e8);
 
         vm.prank(operator);
         vault.withdraw(id, validators, action, signatures);

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.25;
 
-import {AZVault} from "../../src/AZVault.sol";
+import {AssetVault} from "../../src/AssetVault.sol";
 
-contract AZVaultV2 is AZVault {
+contract AssetVaultV2 is AssetVault {
     uint256 public newVariable;
 
     function setNewVariable(uint256 value) external {

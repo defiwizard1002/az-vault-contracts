@@ -45,7 +45,7 @@ struct WithdrawAction {
     address receiver;
 }
 
-contract AZVault is
+contract AssetVault is
     PausableUpgradeable,
     AccessControlUpgradeable,
     UUPSUpgradeable,
