@@ -22,15 +22,18 @@ import {
 import {
     AccessControlUpgradeable
 } from "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
-import {IAggregatorV3Interface} from "./interfaces/IAggregatorV3Interface.sol";
 
 struct TokenInfo {
     address token;
-    address priceFeed;
-    uint256 price;
-    bool fixedPrice;
-    uint8 priceDecimals;
-    uint8 tokenDecimals;
+    // when usedWithdrawHotAmount < hardCap (=totalLockedTokenAmount * hardCapRatioBps / 10000),
+    // pending mode will be activated
+    uint256 hardCapRatioBps;
+    // Every second, the usedWithdrawHotAmount will be decreased by refillRateMps / 1000000 * hardCap
+    uint256 refillRateMps;
+    // The timestamp of the last refill
+    uint256 lastRefillTimestamp;
+    // Every time user withdraw in fast mode, this amount will be deducted
+    uint256 usedWithdrawHotAmount;
 }
 
 struct ValidatorInfo {
@@ -38,11 +41,32 @@ struct ValidatorInfo {
     uint256 power;
 }
 
+enum WithdrawType {
+    NORMAL,
+    FORCE_PENDING,
+    PAUSE_WITHDRAW,
+    UNPAUSE_WITHDRAW,
+    FLUSH
+}
+
 struct WithdrawAction {
     address token;
     uint256 amount;
     uint256 fee;
     address receiver;
+    WithdrawType withdrawType;
+}
+
+struct Withdrawal {
+    bool paused;
+    bool pending;
+    bool executed;
+    uint256 amount;
+    address token;
+    uint256 fee;
+    address receiver;
+    uint256 timestamp;
+    WithdrawType withdrawType;
 }
 
 contract AssetVault is
@@ -56,18 +80,15 @@ contract AssetVault is
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
     bytes32 public constant PAUSE_ROLE = keccak256("PAUSE_ROLE");
     bytes32 public constant UPGRADE_ROLE = keccak256("UPGRADE_ROLE");
-    
-    uint8 public constant USD_DECIMALS = 8;
-
-    address public immutable TIMELOCK_ADDRESS;
-
-    uint256 public hourlyWithdrawLimit;
 
     mapping(address => TokenInfo) public supportedTokens;
 
-    mapping(uint256 => bool) public withdrawHistory;
+    mapping(uint256 => Withdrawal) public withdrawals;
 
-    mapping(uint256 => uint256) public withdrawAmounts;
+    uint256[] public pendingWithdrawalIds;
+
+    // After challenge period, the pending withdraw can be withdrawn unconditionally
+    uint256 public pendingWithdrawChallengePeriod;
 
     mapping(bytes32 => uint256) public availableValidators;
 
@@ -78,25 +99,40 @@ contract AssetVault is
         address indexed token,
         uint256 amount
     );
-    event WithdrawPaused(
-        address indexed trigger,
-        address indexed token,
-        uint256 amount,
-        uint256 amountUsd
+    event PendingWithdrawalToggled(
+        uint256 indexed id,
+        bool paused
     );
     event Withdraw(
         uint256 indexed id,
         address indexed to,
         address indexed token,
         uint256 amount,
-        uint256 fee
+        uint256 fee,
+        WithdrawType withdrawType
     );
-    event TokenInfoAdded(
+    event TokenAdded(
         address indexed token,
-        address indexed priceFeed,
-        bool fixedPrice
+        uint256 hardCapRatio,
+        uint256 refillRateMps
     );
-    event TokenInfoRemoved(address indexed token);
+    event TokenRemoved(address indexed token);
+    event TokenUpdated(
+        address indexed token,
+        uint256 hardCapRatio,
+        uint256 refillRateMps
+    );
+    event WithdrawHotAmountRefilled(
+        address indexed token,
+        uint256 refillAmount,
+        uint256 usedWithdrawHotAmount
+    );
+    event WithdrawHotAmountUsed(
+        address indexed token,
+        uint256 amount,
+        uint256 updateUsedWithdrawHotAmount,
+        bool forcePending
+    );
 
     event ValidatorsAdded(
         bytes32 indexed hash,
@@ -106,21 +142,36 @@ contract AssetVault is
 
     event ValidatorsRemoved(bytes32 indexed hash, uint256 count);
 
-    event UpdateHourlyWithdrawLimit(uint256 oldHourlyWithdrawLimit, uint256 newHourlyWithdrawLimit);
-
     event FeesWithdrawn(address[] tokens, uint256[] amounts, address to);
+
+    event PendingWithdrawChallengePeriodUpdated(
+        uint256 oldValue,
+        uint256 newValue
+    );
+
+    modifier onlySupportedToken(address token) {
+        require(
+            supportedTokens[token].token != address(0),
+            "token not supported"
+        );
+        _;
+    }
 
     constructor() {
         _disableInitializers();
     }
 
-    function initialize() public initializer {
+    function initialize(
+        uint256 _pendingWithdrawChallengePeriod
+    ) public initializer {
         __Pausable_init();
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        pendingWithdrawChallengePeriod = _pendingWithdrawChallengePeriod;
     }
 
-    function _authorizeUpgrade(address newImplementation) internal override onlyRole(UPGRADE_ROLE) {
-    }
+    function _authorizeUpgrade(
+        address newImplementation
+    ) internal override(UUPSUpgradeable) onlyRole(UPGRADE_ROLE) {}
 
     function pause() external onlyRole(PAUSE_ROLE) {
         _pause();
@@ -128,6 +179,14 @@ contract AssetVault is
 
     function unpause() external onlyRole(PAUSE_ROLE) {
         _unpause();
+    }
+
+    function updatePendingWithdrawChallengePeriod(
+        uint256 newValue
+    ) external onlyRole(ADMIN_ROLE) {
+        uint256 oldValue = pendingWithdrawChallengePeriod;
+        pendingWithdrawChallengePeriod = newValue;
+        emit PendingWithdrawChallengePeriodUpdated(oldValue, newValue);
     }
 
     function addValidators(
@@ -161,13 +220,6 @@ contract AssetVault is
         emit ValidatorsRemoved(validatorHash, validators.length);
     }
 
-    function updateHourlyWithdrawLimit(uint256 newHourlyWithdrawLimit) external onlyRole(ADMIN_ROLE) {
-        require(newHourlyWithdrawLimit > 0, "zero amount");
-        uint256 oldHourlyWithdrawLimit = hourlyWithdrawLimit;
-        hourlyWithdrawLimit = newHourlyWithdrawLimit;
-        emit UpdateHourlyWithdrawLimit(oldHourlyWithdrawLimit, newHourlyWithdrawLimit);
-    }
-
     function withdrawFees(
         address[] calldata tokens,
         uint256[] calldata amounts,
@@ -192,45 +244,38 @@ contract AssetVault is
 
     function addToken(
         address token,
-        address priceFeed,
-        uint256 price,
-        bool fixedPrice,
-        uint8 priceDecimals,
-        uint8 tokenDecimals
+        uint256 hardCapRatioBps,
+        uint256 refillRateMps
     ) external onlyRole(TOKEN_ROLE) {
-        require(priceFeed != address(0), "zero address");
         TokenInfo storage tokenInfo = supportedTokens[token];
-        require(!_isTokenSupported(token), "token already exist");
+        require(tokenInfo.token == address(0), "token already exist");
         tokenInfo.token = token;
-        tokenInfo.fixedPrice = fixedPrice;
-        tokenInfo.priceDecimals = priceDecimals;
-        tokenInfo.tokenDecimals = tokenDecimals;
-        if (fixedPrice) {
-            tokenInfo.price = price;
-        } else {
-            IAggregatorV3Interface oracle = IAggregatorV3Interface(priceFeed);
-            require(
-                oracle.decimals() == priceDecimals,
-                "invalid price decimals"
-            );
-            tokenInfo.priceFeed = priceFeed;
-        }
-        emit TokenInfoAdded(token, priceFeed, fixedPrice);
+        tokenInfo.hardCapRatioBps = hardCapRatioBps;
+        tokenInfo.refillRateMps = refillRateMps;
+        emit TokenAdded(token, hardCapRatioBps, refillRateMps);
     }
 
-    function removeToken(address token) external onlyRole(ADMIN_ROLE) {
-        require(token != address(0), "zero address");
-        require(_isTokenSupported(token), "token not supported");
+    function removeToken(
+        address token
+    ) external onlyRole(ADMIN_ROLE) onlySupportedToken(token) {
         delete supportedTokens[token];
-        emit TokenInfoRemoved(token);
+        emit TokenRemoved(token);
     }
 
+    function updateToken(
+        address token,
+        uint256 hardCapRatioBps,
+        uint256 refillRateMps
+    ) external onlyRole(ADMIN_ROLE) onlySupportedToken(token) {
+        supportedTokens[token].hardCapRatioBps = hardCapRatioBps;
+        supportedTokens[token].refillRateMps = refillRateMps;
+        emit TokenUpdated(token, hardCapRatioBps, refillRateMps);
+    }
 
     function deposit(
         address token,
         uint256 amount
-    ) external payable whenNotPaused nonReentrant {
-        require(_isTokenSupported(token), "token not supported");
+    ) external payable whenNotPaused onlySupportedToken(token) nonReentrant {
         require(amount > 0, "zero amount");
         if (token == address(0)) {
             require(amount == msg.value, "value mismatch");
@@ -246,7 +291,7 @@ contract AssetVault is
             uint256 balanceAfter = IERC20(token).balanceOf(address(this));
             require(amount == balanceAfter - balanceBefore, "amount mismatch");
         }
-        
+
         emit Deposit(msg.sender, token, amount);
     }
 
@@ -255,9 +300,16 @@ contract AssetVault is
         ValidatorInfo[] calldata validators,
         WithdrawAction calldata action,
         bytes[] calldata validatorSignatures
-    ) external payable whenNotPaused onlyRole(OPERATOR_ROLE) nonReentrant {
-        require(!withdrawHistory[id], "used withdraw id");
-        require(_isTokenSupported(action.token), "token not supported");
+    )
+        external
+        payable
+        whenNotPaused
+        onlyRole(OPERATOR_ROLE)
+        onlySupportedToken(action.token)
+        nonReentrant
+    {
+        _refillWithdrawHotAmount(action.token);
+
         bytes32 digest = keccak256(
             abi.encode(
                 "withdraw",
@@ -267,37 +319,84 @@ contract AssetVault is
                 action.token,
                 action.amount,
                 action.fee,
-                action.receiver
+                action.receiver,
+                action.withdrawType
             )
         );
+
         _verifyValidatorSignature(validators, digest, validatorSignatures);
-        if (!_checkLimit(action.token, action.amount)) {
-            return;
-        } else {
-            withdrawHistory[id] = true;
-            _transfer(
-                payable(action.receiver),
-                action.token,
-                action.amount,
-                action.fee
+
+        if (action.withdrawType == WithdrawType.PAUSE_WITHDRAW) {
+            _togglePendingWithdrawal(id, true);
+        } else if (action.withdrawType == WithdrawType.UNPAUSE_WITHDRAW) {
+            _togglePendingWithdrawal(id, false);
+        } else if (action.withdrawType == WithdrawType.FLUSH) {
+            // todo: flush
+        } else if (action.withdrawType == WithdrawType.NORMAL) {
+            // when normal withdrawal triggers hard cap exceeded, fallback to pending mode
+            bool shouldPending = _increaseUsedWithdrawHotAmount(
+                supportedTokens[action.token],
+                action.amount
             );
-            emit Withdraw(
+            _addWithdrawal(
                 id,
-                action.receiver,
                 action.token,
                 action.amount,
-                action.fee
+                action.fee,
+                action.receiver,
+                action.withdrawType,
+                shouldPending
+            );
+            if (!shouldPending) {
+                // directly execute the withdrawal
+                executeWithdrawal(id);
+            }
+        } else if (action.withdrawType == WithdrawType.FORCE_PENDING) {
+            _addWithdrawal(
+                id,
+                action.token,
+                action.amount,
+                action.fee,
+                action.receiver,
+                action.withdrawType,
+                true
             );
         }
     }
 
-    // ================================ Internal Functions ================================
-
-    function _isTokenSupported(address token) internal view returns (bool) {
-        return supportedTokens[token].tokenDecimals != 0;
+    function executeWithdrawal(uint256 id) public onlyRole(OPERATOR_ROLE) {
+        _checkWithdrawalExists(id, true);
+        Withdrawal storage withdrawal = withdrawals[id];
+        require(!withdrawal.executed, "withdrawal executed");
+        require(!withdrawal.paused, "withdrawal paused");
+        // pending withdrawal can only be executed if challenge period is expired
+        if (withdrawal.pending) {
+            require(
+                block.timestamp >=
+                    withdrawal.timestamp + pendingWithdrawChallengePeriod,
+                "challenge period not expired"
+            );
+        }
+        _transfer(
+            payable(withdrawal.receiver),
+            withdrawal.token,
+            withdrawal.amount,
+            withdrawal.fee
+        );
+        withdrawal.executed = true;
+        emit Withdraw(
+            id,
+            withdrawal.receiver,
+            withdrawal.token,
+            withdrawal.amount,
+            withdrawal.fee,
+            WithdrawType.NORMAL
+        );
     }
 
-    // validators must be sorted
+    // ================================ Internal Functions ================================
+
+    // validators must be sorted by address
     function _verifyValidatorSignature(
         ValidatorInfo[] calldata validators,
         bytes32 digest,
@@ -336,27 +435,91 @@ contract AssetVault is
         require(power >= (totalPower * 2) / 3, "not enough validator power");
     }
 
-    function _checkLimit(
-        address token,
-        uint256 amount
-    ) internal returns (bool) {
-        uint256 amountUsd = _amountUsd(token, amount);
-        require(amountUsd > 0, "zero usd amount");
-        uint256 cursor = block.timestamp / 1 hours;
-        if (withdrawAmounts[cursor] + amountUsd > hourlyWithdrawLimit) {
-            _pause();
-            emit WithdrawPaused(msg.sender, token, amount, amountUsd);
-            return false;
+    function _refillWithdrawHotAmount(address token) internal {
+        TokenInfo storage tokenInfo = supportedTokens[token];
+        uint256 refillPeriod = block.timestamp - tokenInfo.lastRefillTimestamp;
+        uint256 hardCap = (IERC20(token).balanceOf(address(this)) *
+            tokenInfo.hardCapRatioBps) / 10000;
+        uint256 refillAmount = (hardCap *
+            tokenInfo.refillRateMps *
+            refillPeriod) / 1000000;
+        if (tokenInfo.usedWithdrawHotAmount < refillAmount) {
+            tokenInfo.usedWithdrawHotAmount = 0;
         } else {
-            withdrawAmounts[cursor] += amountUsd;
-            return true;
+            tokenInfo.usedWithdrawHotAmount -= refillAmount;
         }
+        tokenInfo.lastRefillTimestamp = block.timestamp;
+        emit WithdrawHotAmountRefilled(
+            tokenInfo.token,
+            refillAmount,
+            tokenInfo.usedWithdrawHotAmount
+        );
     }
 
-    bytes32 internal constant PERMIT_TYPEHASH =
-        keccak256(
-            "Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)"
+    function _increaseUsedWithdrawHotAmount(
+        TokenInfo storage tokenInfo,
+        uint256 amount
+    ) internal returns (bool forcePending) {
+        uint256 hardCap = (IERC20(tokenInfo.token).balanceOf(address(this)) *
+            tokenInfo.hardCapRatioBps) / 10000;
+        // hard cap exceeded
+        if (tokenInfo.usedWithdrawHotAmount + amount > hardCap) {
+            forcePending = true;
+        } else {
+            tokenInfo.usedWithdrawHotAmount += amount;
+        }
+        emit WithdrawHotAmountUsed(
+            tokenInfo.token,
+            amount,
+            tokenInfo.usedWithdrawHotAmount,
+            forcePending
         );
+    }
+
+    function _addWithdrawal(
+        uint256 id,
+        address token,
+        uint256 amount,
+        uint256 fee,
+        address receiver,
+        WithdrawType withdrawType,
+        bool isPending
+    ) internal {
+        _checkWithdrawalExists(id, false);
+        withdrawals[id] = Withdrawal(
+            false,
+            isPending,
+            false,
+            amount,
+            fee,
+            receiver,
+            block.timestamp,
+            withdrawType
+        );
+    }
+
+    function _togglePendingWithdrawal(uint256 id, bool shouldPause) internal {
+        Withdrawal storage withdrawal = withdrawals[id];
+        // 1. executed withdrawal cannot be paused/unpaused
+        // 2. pending withdrawal cannot be paused/unpaused if challenge period is expired
+        require(
+            !withdrawal.executed ||
+                block.timestamp <
+                withdrawal.timestamp + pendingWithdrawChallengePeriod,
+            "withdraw executed or challenge period expired"
+        );
+        require(
+            withdrawal.paused != shouldPause,
+            "withdraw already in desired state"
+        );
+        withdrawal.paused = shouldPause;
+        emit PendingWithdrawalToggled(id, shouldPause);
+    }
+
+    function _checkWithdrawalExists(uint256 id, bool shouldExist) internal {
+        bool isExisting = withdrawals[id].timestamp > 0;
+        require(isExisting == shouldExist, "withdrawal existance check failed");
+    }
 
     function _transfer(
         address payable to,
@@ -373,23 +536,5 @@ contract AssetVault is
                 fees[token] += fee;
             }
         }
-    }
-
-    function _amountUsd(
-        address token,
-        uint256 amount
-    ) private view returns (uint256) {
-        TokenInfo memory tokenInfo = supportedTokens[token];
-        uint256 price = tokenInfo.price;
-        if (!tokenInfo.fixedPrice) {
-            IAggregatorV3Interface oracle = IAggregatorV3Interface(
-                tokenInfo.priceFeed
-            );
-            (, int256 oraclePrice, , , ) = oracle.latestRoundData();
-            price = uint256(oraclePrice);
-        }
-        return
-            (price * amount * (10 ** USD_DECIMALS)) /
-            (10 ** (tokenInfo.priceDecimals + tokenInfo.tokenDecimals));
     }
 }
