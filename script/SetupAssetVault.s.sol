@@ -16,13 +16,8 @@ contract SetupAssetVault is Script {
         // Setup roles (optional - if roles need to be granted)
         _setupRoles(vault);
 
-        // Setup tokens
-        _setupTokens(vault);
-
         // Setup validators
-        // _setupValidators(vault);
-
-        vault.updateHourlyWithdrawLimit(100000000000e8);
+        _setupValidators(vault);
 
         vm.stopBroadcast();
     }
@@ -80,55 +75,6 @@ contract SetupAssetVault is Script {
                 vault.grantRole(vault.UPGRADE_ROLE(), upgradeRole);
                 console.log("Granted UPGRADE_ROLE to:", upgradeRole);
             }
-        } catch {}
-    }
-
-    function _setupTokens(AssetVault vault) internal {
-        // Add ETH (address(0)) with fixed price if configured
-        try vm.envBool("ADD_ETH_TOKEN") returns (bool addEth) {
-            if (addEth) {
-                (, , , , , uint8 currentTokenDecimals) = vault.supportedTokens(address(0));
-                if (currentTokenDecimals != 0) {
-                    console.log("ETH token already exists, skipping token setup");
-                    return;
-                }
-                console.log("Added ETH token with price feed");
-                vault.addToken(
-                    address(0), // ETH
-                    address(0x694AA1769357215DE4FAC081bf1f309aDC325306), // priceFeed (not used for fixed price)
-                    0, // price
-                    false, // fixedPrice
-                    8, // priceDecimals
-                    18 // tokenDecimals
-                );
-            }
-        } catch {}
-        // Add ERC20 token with price feed if configured
-        try vm.envAddress("TOKEN_ADDRESS") returns (address tokenAddress) {
-            address priceFeedAddress = vm.envAddress("PRICE_FEED_ADDRESS");
-            uint8 priceDecimals = uint8(vm.envUint("PRICE_DECIMALS"));
-            uint8 tokenDecimals = uint8(vm.envUint("TOKEN_DECIMALS"));
-
-            (, , , , , uint8 currentTokenDecimals) = vault.supportedTokens(tokenAddress);
-            if (currentTokenDecimals != 0) {
-                console.log("Token already exists, skipping token setup");
-                return;
-            }
-
-            vault.addToken(
-                tokenAddress,
-                priceFeedAddress,
-                0, // price (not used for oracle)
-                false, // fixedPrice
-                priceDecimals,
-                tokenDecimals
-            );
-            console.log(
-                "Added token:",
-                tokenAddress,
-                "with price feed:",
-                priceFeedAddress
-            );
         } catch {}
     }
 

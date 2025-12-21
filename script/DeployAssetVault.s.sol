@@ -19,7 +19,7 @@ contract DeployAssetVault is Script {
 
         // Deploy proxy with initialization
         console.log("Deploying proxy...");
-        bytes memory initData = abi.encodeWithSelector(AssetVault.initialize.selector);
+        bytes memory initData = abi.encodeWithSelector(AssetVault.initialize.selector, pendingWithdrawChallengePeriod);
         ERC1967Proxy proxy = new ERC1967Proxy(address(implementation), initData);
         AssetVault vault = AssetVault(payable(address(proxy)));
         console.log("Proxy deployed at:", address(vault));

@@ -94,64 +94,64 @@ contract AssetVault is
 
     mapping(address => uint256) public fees;
 
-    event Deposit(
-        address indexed account,
-        address indexed token,
-        uint256 amount
-    );
-    event PendingWithdrawalToggled(
-        uint256 indexed id,
-        bool paused
-    );
-    event Withdraw(
-        uint256 indexed id,
-        address indexed to,
-        address indexed token,
-        uint256 amount,
-        uint256 fee,
-        WithdrawType withdrawType
-    );
+    event Deposit(address account, address token, uint256 amount);
+
     event TokenAdded(
-        address indexed token,
-        uint256 hardCapRatio,
+        address token,
+        uint256 hardCapRatioBps,
         uint256 refillRateMps
     );
-    event TokenRemoved(address indexed token);
+    event TokenRemoved(address token);
     event TokenUpdated(
-        address indexed token,
-        uint256 hardCapRatio,
+        address token,
+        uint256 hardCapRatioBps,
         uint256 refillRateMps
     );
+
     event WithdrawHotAmountRefilled(
-        address indexed token,
+        address token,
         uint256 refillAmount,
         uint256 usedWithdrawHotAmount
     );
     event WithdrawHotAmountUsed(
-        address indexed token,
+        address token,
         uint256 amount,
         uint256 updateUsedWithdrawHotAmount,
         bool forcePending
     );
-
-    event ValidatorsAdded(
-        bytes32 indexed hash,
-        uint256 count,
-        uint256 totalPower
+    event WithdrawalAdded(
+        uint256 id,
+        address token,
+        uint256 amount,
+        uint256 fee,
+        address receiver,
+        WithdrawType withdrawType,
+        bool isPending
     );
+    event WithdrawExecuted(
+        uint256 id,
+        address to,
+        address token,
+        uint256 amount,
+        uint256 fee,
+        WithdrawType withdrawType
+    );
+    event PendingWithdrawalToggled(uint256 id, bool paused);
 
-    event ValidatorsRemoved(bytes32 indexed hash, uint256 count);
-
-    event FeesWithdrawn(address[] tokens, uint256[] amounts, address to);
+    event ValidatorsAdded(bytes32 hash, uint256 count, uint256 totalPower);
+    event ValidatorsRemoved(bytes32 hash, uint256 count);
 
     event PendingWithdrawChallengePeriodUpdated(
         uint256 oldValue,
         uint256 newValue
     );
 
+    // Fee events
+    event FeesWithdrawn(address[] tokens, uint256[] amounts, address to);
+
     modifier onlySupportedToken(address token) {
         require(
-            supportedTokens[token].token != address(0),
+            supportedTokens[token].hardCapRatioBps > 0,
             "token not supported"
         );
         _;
@@ -248,7 +248,8 @@ contract AssetVault is
         uint256 refillRateMps
     ) external onlyRole(TOKEN_ROLE) {
         TokenInfo storage tokenInfo = supportedTokens[token];
-        require(tokenInfo.token == address(0), "token already exist");
+        require(tokenInfo.hardCapRatioBps == 0, "token already exists");
+        _validateToken(hardCapRatioBps, refillRateMps);
         tokenInfo.token = token;
         tokenInfo.hardCapRatioBps = hardCapRatioBps;
         tokenInfo.refillRateMps = refillRateMps;
@@ -267,6 +268,7 @@ contract AssetVault is
         uint256 hardCapRatioBps,
         uint256 refillRateMps
     ) external onlyRole(ADMIN_ROLE) onlySupportedToken(token) {
+        _validateToken(hardCapRatioBps, refillRateMps);
         supportedTokens[token].hardCapRatioBps = hardCapRatioBps;
         supportedTokens[token].refillRateMps = refillRateMps;
         emit TokenUpdated(token, hardCapRatioBps, refillRateMps);
@@ -384,7 +386,7 @@ contract AssetVault is
             withdrawal.fee
         );
         withdrawal.executed = true;
-        emit Withdraw(
+        emit WithdrawExecuted(
             id,
             withdrawal.receiver,
             withdrawal.token,
@@ -395,6 +397,13 @@ contract AssetVault is
     }
 
     // ================================ Internal Functions ================================
+
+    function _validateToken(
+        uint256 hardCapRatioBps,
+        uint256 refillRateMps
+    ) internal pure {
+        require(hardCapRatioBps > 0 && hardCapRatioBps <= 10000 && refillRateMps > 0 && refillRateMps <= 1000000, "invalid parameters");
+    }
 
     // validators must be sorted by address
     function _verifyValidatorSignature(
@@ -491,10 +500,20 @@ contract AssetVault is
             isPending,
             false,
             amount,
+            token,
             fee,
             receiver,
             block.timestamp,
             withdrawType
+        );
+        emit WithdrawalAdded(
+            id,
+            token,
+            amount,
+            fee,
+            receiver,
+            withdrawType,
+            isPending
         );
     }
 
@@ -504,8 +523,9 @@ contract AssetVault is
         // 2. pending withdrawal cannot be paused/unpaused if challenge period is expired
         require(
             !withdrawal.executed ||
-                block.timestamp <
-                withdrawal.timestamp + pendingWithdrawChallengePeriod,
+                (block.timestamp <
+                    withdrawal.timestamp + pendingWithdrawChallengePeriod &&
+                    withdrawal.pending),
             "withdraw executed or challenge period expired"
         );
         require(
