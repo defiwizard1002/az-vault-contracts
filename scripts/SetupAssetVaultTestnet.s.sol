@@ -3,23 +3,91 @@ pragma solidity ^0.8.25;
 
 import {Script, console} from "forge-std/Script.sol";
 import {AssetVault, ValidatorInfo} from "../src/AssetVault.sol";
+import {MockERC20} from "../test/mock/MockERC20.sol";
 
 contract SetupAssetVault is Script {
+    // Challenge period: 2 minutes = 120 seconds
+    uint256 public constant CHALLENGE_PERIOD = 120;
+
     function run() external {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
+        address deployer = vm.addr(deployerPrivateKey);
         address vaultAddress = vm.envAddress("VAULT_ADDRESS");
 
         AssetVault vault = AssetVault(payable(vaultAddress));
 
         vm.startBroadcast(deployerPrivateKey);
 
-        // Setup roles (optional - if roles need to be granted)
+        // Setup roles first (optional - if roles need to be granted)
         _setupRoles(vault);
+
+        // Ensure deployer has TOKEN_ROLE to add tokens
+        if (!vault.hasRole(vault.TOKEN_ROLE(), deployer)) {
+            vault.grantRole(vault.TOKEN_ROLE(), deployer);
+            console.log("Granted TOKEN_ROLE to deployer:", deployer);
+        }
+
+        // Setup challenge period
+        _setupChallengePeriod(vault);
+
+        // Deploy mock tokens
+        (address token1, address token2) = _deployMockTokens();
+
+        // Add tokens to vault
+        _addTokensToVault(vault, token1, token2);
 
         // Setup validators
         _setupValidators(vault);
 
         vm.stopBroadcast();
+    }
+
+    function _setupChallengePeriod(AssetVault vault) internal {
+        uint256 currentPeriod = vault.pendingWithdrawChallengePeriod();
+        if (currentPeriod == CHALLENGE_PERIOD) {
+            console.log("Challenge period already set to 2 minutes");
+            return;
+        }
+        vault.updatePendingWithdrawChallengePeriod(CHALLENGE_PERIOD);
+        console.log("Challenge period set to 2 minutes (120 seconds)");
+    }
+
+    function _deployMockTokens() internal returns (address token1, address token2) {
+        console.log("Deploying MockERC20 tokens...");
+        
+        MockERC20 mockToken1 = new MockERC20("Mock Token 1", "MTK1");
+        MockERC20 mockToken2 = new MockERC20("Mock Token 2", "MTK2");
+        
+        token1 = address(mockToken1);
+        token2 = address(mockToken2);
+        
+        console.log("Mock Token 1 deployed at:", token1);
+        console.log("Mock Token 2 deployed at:", token2);
+    }
+
+    function _addTokensToVault(
+        AssetVault vault,
+        address token1,
+        address token2
+    ) internal {
+        // Default token parameters: hardCapRatioBps = 5000 (50%), refillRateMps = 2000 (0.2% per second)
+        uint256 hardCapRatioBps = 5000;
+        uint256 refillRateMps = 2000;
+
+        // Check if tokens are already added
+        if (vault.supportedTokens(token1).hardCapRatioBps > 0) {
+            console.log("Token 1 already added to vault");
+        } else {
+            vault.addToken(token1, hardCapRatioBps, refillRateMps);
+            console.log("Added Token 1 to vault:", token1);
+        }
+
+        if (vault.supportedTokens(token2).hardCapRatioBps > 0) {
+            console.log("Token 2 already added to vault");
+        } else {
+            vault.addToken(token2, hardCapRatioBps, refillRateMps);
+            console.log("Added Token 2 to vault:", token2);
+        }
     }
 
     function _setupRoles(AssetVault vault) internal {

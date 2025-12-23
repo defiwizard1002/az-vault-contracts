@@ -1,0 +1,16 @@
+{
+  "11155111": {
+    "AssetVault": [
+      {
+        "name": "AssetVault",
+        "address": "0x9634eb59e37592ba2a346827447d65b606446e7a"
+      }
+    ],
+    "AssetVaultProxy": [
+      {
+        "name": "AssetVaultProxy",
+        "address": "0xf105063609cbd63977d9c2bee0142c10fe3d27e8"
+      }
+    ]
+  }
+}
