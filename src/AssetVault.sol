@@ -46,8 +46,7 @@ enum WithdrawType {
     FORCE_PENDING,
     PAUSE_WITHDRAW,
     UNPAUSE_WITHDRAW,
-    FLUSH,
-    FLUSH_ALL
+    FLUSH
 }
 
 struct WithdrawAction {
@@ -378,7 +377,7 @@ contract AssetVault is
     function executeWithdrawal(uint256 id) public onlyRole(OPERATOR_ROLE) {
         _checkWithdrawalExists(id, true);
         Withdrawal storage withdrawal = withdrawals[id];
-        require(!withdrawal.executed, "withdrawal executed");
+        _checkWithdrawalNotExecuted(id);
         require(!withdrawal.paused, "withdrawal paused");
         // pending withdrawal can only be executed if challenge period is expired
         if (withdrawal.pending) {
@@ -539,8 +538,8 @@ contract AssetVault is
         Withdrawal storage withdrawal = withdrawals[id];
         // 1. executed withdrawal cannot be paused/unpaused
         // 2. pending withdrawal cannot be paused/unpaused if challenge period is expired
-        require(!withdrawal.executed, "withdrawal already executed");
-        require(withdrawal.pending, "withdrawal not pending");
+        _checkWithdrawalNotExecuted(id);
+        _checkWithdrawalPending(id);
         require(
             block.timestamp <
                 withdrawal.timestamp + pendingWithdrawChallengePeriod,
@@ -554,11 +553,11 @@ contract AssetVault is
         emit PendingWithdrawalToggled(id, shouldPause);
     }
 
-    // No matter the withdrawal is pending or not, paused or not, it will be flushed
+    // No matter the withdrawal is pending or not, paused or not, it will be executed when flushing
     function _flushWithdrawal(uint256 id) internal {
         _checkWithdrawalExists(id, true);
         Withdrawal storage withdrawal = withdrawals[id];
-        require(!withdrawal.executed, "withdrawal already executed");
+        _checkWithdrawalNotExecuted(id);
         _transfer(
             payable(withdrawal.receiver),
             withdrawal.token,
@@ -585,6 +584,14 @@ contract AssetVault is
     ) internal view {
         bool isExisting = withdrawals[id].timestamp > 0;
         require(isExisting == shouldExist, "withdrawal existance check failed");
+    }
+
+    function _checkWithdrawalNotExecuted(uint256 id) internal view {
+        require(!withdrawals[id].executed, "withdrawal already executed");
+    }
+
+    function _checkWithdrawalPending(uint256 id) internal view {
+        require(withdrawals[id].pending, "withdrawal must be pending");
     }
 
     function _transfer(

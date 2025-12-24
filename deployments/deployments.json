@@ -3,13 +3,23 @@
     "AssetVault": [
       {
         "name": "AssetVault",
-        "address": "0x9634eb59e37592ba2a346827447d65b606446e7a"
+        "address": "0xdb698da547c3a9a282596189e119b0c78ca5a22e"
       }
     ],
     "AssetVaultProxy": [
       {
         "name": "AssetVaultProxy",
-        "address": "0xf105063609cbd63977d9c2bee0142c10fe3d27e8"
+        "address": "0x4f0e87a31dc02d0336b104d6d2b777c663801b26"
+      }
+    ],
+    "MockERC20": [
+      {
+        "name": "MockERC20",
+        "address": "0xd95ff9504797664ecdfb2e71d888090ad233c044"
+      },
+      {
+        "name": "MockERC20",
+        "address": "0xde51a925d157cb147facc6c97c48b43fccd5f531"
       }
     ]
   }

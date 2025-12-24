@@ -1050,6 +1050,24 @@
         "internalType": "uint256"
       },
       {
+        "name": "isPending",
+        "type": "bool",
+        "indexed": false,
+        "internalType": "bool"
+      },
+      {
+        "name": "isFlushed",
+        "type": "bool",
+        "indexed": false,
+        "internalType": "bool"
+      },
+      {
+        "name": "isPaused",
+        "type": "bool",
+        "indexed": false,
+        "internalType": "bool"
+      },
+      {
         "name": "withdrawType",
         "type": "uint8",
         "indexed": false,

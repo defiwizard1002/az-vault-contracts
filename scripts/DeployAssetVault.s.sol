@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.25;
 
-// forge script scripts/UpgradeStaking.sol:UpgradeStaking --rpc-url https://ethereum-sepolia-rpc.publicnode.com --broadcast --verify --verifier-url https://api.etherscan.io/v2/api\?chainid\=11155111 --chain 11155111 --etherscan-api-key ZYAXTNKDU9W5FQIXC9DI7QESH2KEQTGYK7c --gas-price 50 
+// forge script scripts/DeployAssetVault.sol:DeployAssetVault --rpc-url https://ethereum-sepolia-rpc.publicnode.com --broadcast --verify --verifier-url https://api.etherscan.io/v2/api\?chainid\=11155111 --chain 11155111 --etherscan-api-key ZYAXTNKDU9W5FQIXC9DI7QESH2KEQTGYK7c --gas-price 50 
 
 import {Script, console} from "forge-std/Script.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
@@ -9,7 +9,7 @@ import {AssetVault} from "../src/AssetVault.sol";
 
 contract DeployAssetVault is Script {
     function run() external returns (address vaultAddress, address implementationAddress) {
-        uint256 deployerPrivateKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
+        uint256 deployerPrivateKey = vm.envUint("AZ_DEPLOYER_PRIVATE_KEY");
         address deployer = vm.addr(deployerPrivateKey);
 
         vm.startBroadcast(deployerPrivateKey);

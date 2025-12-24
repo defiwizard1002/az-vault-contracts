@@ -10,7 +10,7 @@ contract SetupAssetVault is Script {
     uint256 public constant CHALLENGE_PERIOD = 120;
 
     function run() external {
-        uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
+        uint256 deployerPrivateKey = vm.envUint("AZ_DEPLOYER_PRIVATE_KEY");
         address deployer = vm.addr(deployerPrivateKey);
         address vaultAddress = vm.envAddress("VAULT_ADDRESS");
 
@@ -75,14 +75,16 @@ contract SetupAssetVault is Script {
         uint256 refillRateMps = 2000;
 
         // Check if tokens are already added
-        if (vault.supportedTokens(token1).hardCapRatioBps > 0) {
+        (address tokenAddr1, uint256 hardCapRatioBps1, uint256 refillRateMps1, uint256 lastRefillTimestamp1, uint256 usedWithdrawHotAmount1) = vault.supportedTokens(token1);
+        if (hardCapRatioBps1 > 0) {
             console.log("Token 1 already added to vault");
         } else {
             vault.addToken(token1, hardCapRatioBps, refillRateMps);
             console.log("Added Token 1 to vault:", token1);
         }
 
-        if (vault.supportedTokens(token2).hardCapRatioBps > 0) {
+        (address tokenAddr2, uint256 hardCapRatioBps2, uint256 refillRateMps2, uint256 lastRefillTimestamp2, uint256 usedWithdrawHotAmount2) = vault.supportedTokens(token2);
+        if (hardCapRatioBps2 > 0) {
             console.log("Token 2 already added to vault");
         } else {
             vault.addToken(token2, hardCapRatioBps, refillRateMps);
