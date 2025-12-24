@@ -46,7 +46,8 @@ enum WithdrawType {
     FORCE_PENDING,
     PAUSE_WITHDRAW,
     UNPAUSE_WITHDRAW,
-    FLUSH
+    FLUSH,
+    FLUSH_ALL
 }
 
 struct WithdrawAction {
@@ -128,12 +129,20 @@ contract AssetVault is
         WithdrawType withdrawType,
         bool isPending
     );
+
     event WithdrawExecuted(
         uint256 id,
         address to,
         address token,
         uint256 amount,
         uint256 fee,
+        // Whether the withdrawal is pending when executed
+        bool isPending,
+        // Whether the withdrawal is flushed
+        bool isFlushed,
+        // Whether the withdrawal is paused when executed
+        bool isPaused,
+        // Will only be NORMAL or FORCE_PENDING, the types when withdrawal is added
         WithdrawType withdrawType
     );
     event PendingWithdrawalToggled(uint256 id, bool paused);
@@ -333,7 +342,7 @@ contract AssetVault is
         } else if (action.withdrawType == WithdrawType.UNPAUSE_WITHDRAW) {
             _togglePendingWithdrawal(id, false);
         } else if (action.withdrawType == WithdrawType.FLUSH) {
-            // todo: flush
+            _flushWithdrawal(id);
         } else if (action.withdrawType == WithdrawType.NORMAL) {
             // when normal withdrawal triggers hard cap exceeded, fallback to pending mode
             bool shouldPending = _increaseUsedWithdrawHotAmount(
@@ -392,7 +401,10 @@ contract AssetVault is
             withdrawal.token,
             withdrawal.amount,
             withdrawal.fee,
-            WithdrawType.NORMAL
+            withdrawal.pending,
+            false,
+            withdrawal.paused,
+            withdrawal.withdrawType
         );
     }
 
@@ -402,7 +414,13 @@ contract AssetVault is
         uint256 hardCapRatioBps,
         uint256 refillRateMps
     ) internal pure {
-        require(hardCapRatioBps > 0 && hardCapRatioBps <= 10000 && refillRateMps > 0 && refillRateMps <= 1000000, "invalid parameters");
+        require(
+            hardCapRatioBps > 0 &&
+                hardCapRatioBps <= 10000 &&
+                refillRateMps > 0 &&
+                refillRateMps <= 1000000,
+            "invalid parameters"
+        );
     }
 
     // validators must be sorted by address
@@ -521,12 +539,12 @@ contract AssetVault is
         Withdrawal storage withdrawal = withdrawals[id];
         // 1. executed withdrawal cannot be paused/unpaused
         // 2. pending withdrawal cannot be paused/unpaused if challenge period is expired
+        require(!withdrawal.executed, "withdrawal already executed");
+        require(withdrawal.pending, "withdrawal not pending");
         require(
-            !withdrawal.executed ||
-                (block.timestamp <
-                    withdrawal.timestamp + pendingWithdrawChallengePeriod &&
-                    withdrawal.pending),
-            "withdraw executed or challenge period expired"
+            block.timestamp <
+                withdrawal.timestamp + pendingWithdrawChallengePeriod,
+            "challenge period not expired"
         );
         require(
             withdrawal.paused != shouldPause,
@@ -536,7 +554,35 @@ contract AssetVault is
         emit PendingWithdrawalToggled(id, shouldPause);
     }
 
-    function _checkWithdrawalExists(uint256 id, bool shouldExist) internal {
+    // No matter the withdrawal is pending or not, paused or not, it will be flushed
+    function _flushWithdrawal(uint256 id) internal {
+        _checkWithdrawalExists(id, true);
+        Withdrawal storage withdrawal = withdrawals[id];
+        require(!withdrawal.executed, "withdrawal already executed");
+        _transfer(
+            payable(withdrawal.receiver),
+            withdrawal.token,
+            withdrawal.amount,
+            withdrawal.fee
+        );
+        withdrawal.executed = true;
+        emit WithdrawExecuted(
+            id,
+            withdrawal.receiver,
+            withdrawal.token,
+            withdrawal.amount,
+            withdrawal.fee,
+            withdrawal.pending,
+            true,
+            withdrawal.paused,
+            withdrawal.withdrawType
+        );
+    }
+
+    function _checkWithdrawalExists(
+        uint256 id,
+        bool shouldExist
+    ) internal view {
         bool isExisting = withdrawals[id].timestamp > 0;
         require(isExisting == shouldExist, "withdrawal existance check failed");
     }

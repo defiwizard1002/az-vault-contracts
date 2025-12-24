@@ -376,7 +376,7 @@ contract AssetVaultTest is Test {
 
         (, , , , uint256 usedBefore) = vault.supportedTokens(address(token1));
         vm.expectEmit(true, true, true, true);
-        emit AssetVault.WithdrawExecuted(id, receiver, address(token1), amount, fee, WithdrawType.NORMAL);
+        emit AssetVault.WithdrawExecuted(id, receiver, address(token1), amount, fee, false, false, false, WithdrawType.NORMAL);
 
         vm.prank(operator);
         vault.withdraw(id, data.validators, data.action, data.signatures);
@@ -557,7 +557,7 @@ contract AssetVaultTest is Test {
             WithdrawType.PAUSE_WITHDRAW
         );
 
-        vm.expectRevert("withdraw executed or challenge period expired");
+        vm.expectRevert("withdrawal already executed");
         vm.prank(operator);
         vault.withdraw(id, pauseData.validators, pauseData.action, pauseData.signatures);
     }
@@ -589,7 +589,7 @@ contract AssetVaultTest is Test {
         vm.warp(block.timestamp + CHALLENGE_PERIOD + 1);
 
         vm.expectEmit(true, true, true, true);
-        emit AssetVault.WithdrawExecuted(id, receiver, address(token1), amount, fee, WithdrawType.NORMAL);
+        emit AssetVault.WithdrawExecuted(id, receiver, address(token1), amount, fee, true, false, false, WithdrawType.NORMAL);
 
         vm.prank(operator);
         vault.executeWithdrawal(id);
@@ -598,6 +598,143 @@ contract AssetVaultTest is Test {
         assertEq(vault.fees(address(token1)), fee);
         (, , bool executed, , , , , , ) = vault.withdrawals(id);
         assertTrue(executed);
+    }
+
+    function test_PendingWithdraw_RevertExecuteBeforeChallengePeriod() public {
+        vm.startPrank(user);
+        token1.approve(address(vault), 1000e18);
+        vault.deposit(address(token1), 1000e18);
+        vm.stopPrank();
+
+        uint256 hardCap = (1000e18 * 5000) / 10000;
+        uint256 id = 1;
+        uint256 amount = hardCap + 1e18;
+        address receiver = address(0x100);
+
+        WithdrawTestData memory data = _prepareWithdrawData(
+            id,
+            address(token1),
+            amount,
+            0,
+            receiver,
+            WithdrawType.NORMAL
+        );
+
+        vm.prank(operator);
+        vault.withdraw(id, data.validators, data.action, data.signatures);
+
+        (bool paused, bool pending, bool executed, , , , , , ) = vault.withdrawals(id);
+        assertTrue(pending && !executed && !paused);
+
+        vm.warp(block.timestamp + CHALLENGE_PERIOD + 1);
+
+        data = _prepareWithdrawData(id, address(token1), 0, 0, receiver, WithdrawType.PAUSE_WITHDRAW);
+        vm.expectRevert("challenge period not expired");
+        vm.prank(operator);
+        vault.withdraw(id, data.validators, data.action, data.signatures);
+    }
+
+    function test_FlushWithdraw_PendingNotExpired_Success() public {
+        vm.startPrank(user);
+        token1.approve(address(vault), 1000e18);
+        vault.deposit(address(token1), 1000e18);
+        vm.stopPrank();
+
+        uint256 hardCap = (1000e18 * 5000) / 10000;
+        uint256 id = 1;
+        uint256 amount = hardCap + 1e18;
+        uint256 fee = 1e18;
+        address receiver = address(0x100);
+
+        WithdrawTestData memory data = _prepareWithdrawData(
+            id,
+            address(token1),
+            amount,
+            fee,
+            receiver,
+            WithdrawType.NORMAL
+        );
+
+        vm.prank(operator);
+        vault.withdraw(id, data.validators, data.action, data.signatures);
+
+        (bool paused, bool pending, bool executed, , , , , , ) = vault.withdrawals(id);
+        assertTrue(pending);
+        assertFalse(executed);
+        assertFalse(paused);
+
+        uint256 balanceBefore = token1.balanceOf(receiver);
+        uint256 vaultBalanceBefore = token1.balanceOf(address(vault));
+
+        WithdrawTestData memory flushData = _prepareWithdrawData(
+            id,
+            address(token1),
+            0,
+            0,
+            receiver,
+            WithdrawType.FLUSH
+        );
+
+        vm.expectEmit(true, true, true, true);
+        emit AssetVault.WithdrawExecuted(id, receiver, address(token1), amount, fee, true, true, false, WithdrawType.NORMAL);
+
+        vm.prank(operator);
+        vault.withdraw(id, flushData.validators, flushData.action, flushData.signatures);
+
+        assertEq(token1.balanceOf(receiver), balanceBefore + amount - fee);
+        assertEq(token1.balanceOf(address(vault)), vaultBalanceBefore - amount + fee);
+        assertEq(vault.fees(address(token1)), fee);
+        (bool pausedAfter, bool pendingAfter, bool executedAfter, , , , , , ) = vault.withdrawals(id);
+        assertTrue(executedAfter);
+        assertTrue(pendingAfter);
+        assertFalse(pausedAfter);
+    }
+
+    function test_FlushWithdraw_Paused_Success() public {
+        vm.startPrank(user);
+        token1.approve(address(vault), 1000e18);
+        vault.deposit(address(token1), 1000e18);
+        vm.stopPrank();
+
+        uint256 id = 1;
+        uint256 amount = (1000e18 * 5000) / 10000 + 1e18;
+        uint256 fee = 1e18;
+        address receiver = address(0x100);
+
+        WithdrawTestData memory data = _prepareWithdrawData(
+            id,
+            address(token1),
+            amount,
+            fee,
+            receiver,
+            WithdrawType.NORMAL
+        );
+
+        vm.prank(operator);
+        vault.withdraw(id, data.validators, data.action, data.signatures);
+
+        data = _prepareWithdrawData(id, address(token1), 0, 0, receiver, WithdrawType.PAUSE_WITHDRAW);
+        vm.prank(operator);
+        vault.withdraw(id, data.validators, data.action, data.signatures);
+
+        (bool paused, bool pending, bool executed, , , , , , ) = vault.withdrawals(id);
+        assertTrue(pending && !executed && paused);
+
+        uint256 balanceBefore = token1.balanceOf(receiver);
+        uint256 vaultBalanceBefore = token1.balanceOf(address(vault));
+
+        data = _prepareWithdrawData(id, address(token1), 0, 0, receiver, WithdrawType.FLUSH);
+        vm.expectEmit(true, true, true, true);
+        emit AssetVault.WithdrawExecuted(id, receiver, address(token1), amount, fee, true, true, true, WithdrawType.NORMAL);
+
+        vm.prank(operator);
+        vault.withdraw(id, data.validators, data.action, data.signatures);
+
+        assertEq(token1.balanceOf(receiver), balanceBefore + amount - fee);
+        assertEq(token1.balanceOf(address(vault)), vaultBalanceBefore - amount + fee);
+        assertEq(vault.fees(address(token1)), fee);
+        (paused, pending, executed, , , , , , ) = vault.withdrawals(id);
+        assertTrue(executed && pending && paused);
     }
 
     function test_Withdraw_WrongSignature_ModifiedSignature_Reverts() public {
