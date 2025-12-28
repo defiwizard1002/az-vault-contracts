@@ -5,14 +5,14 @@
     "generate-types": "tsx scripts/generateTypes.ts"
   },
   "devDependencies": {
-    "@typechain/ethers-v5": "^10.2.1",
+    "@typechain/ethers-v6": "^0.5.1",
     "typechain": "^8.3.2",
     "tsx": "^4.7.0",
     "typescript": "^5.3.3",
     "@types/node": "^20.10.0"
   },
   "dependencies": {
-    "ethers": "^5.7.2"
+    "ethers": "^6.13.0"
   }
 }
 

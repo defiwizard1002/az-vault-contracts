@@ -2,8 +2,7 @@
 /* tslint:disable */
 /* eslint-disable */
 
-import { Contract, Signer, utils } from "ethers";
-import type { Provider } from "@ethersproject/providers";
+import { Contract, Interface, type ContractRunner } from "ethers";
 import type { AssetVault, AssetVaultInterface } from "../AssetVault";
 
 const _abi = [
@@ -1342,12 +1341,9 @@ const _abi = [
 export class AssetVault__factory {
   static readonly abi = _abi;
   static createInterface(): AssetVaultInterface {
-    return new utils.Interface(_abi) as AssetVaultInterface;
+    return new Interface(_abi) as AssetVaultInterface;
   }
-  static connect(
-    address: string,
-    signerOrProvider: Signer | Provider
-  ): AssetVault {
-    return new Contract(address, _abi, signerOrProvider) as AssetVault;
+  static connect(address: string, runner?: ContractRunner | null): AssetVault {
+    return new Contract(address, _abi, runner) as unknown as AssetVault;
   }
 }

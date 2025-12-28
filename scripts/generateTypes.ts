@@ -4,6 +4,7 @@ import { execSync } from 'child_process';
 
 const broadcastDir = path.join(__dirname, '../broadcast');
 const deploymentsDir = path.join(__dirname, '../deployments');
+const outDir = path.join(__dirname, '../out');
 const artifactsDir = path.join(__dirname, '../deployments/artifacts');
 const typesDir = path.join(__dirname, '../deployments/types');
 
@@ -72,6 +73,11 @@ console.log(`  ✓ Extracted deployments for ${Object.keys(deployments).length} 
 
 console.log('\nStep 2: Preparing artifacts...');
 
+if (!fs.existsSync(deploymentsDir)) {
+  console.error(`  ❌ Deployments directory does not exist: ${deploymentsDir}`);
+  process.exit(1);
+}
+
 if (!fs.existsSync(artifactsDir)) {
   fs.mkdirSync(artifactsDir, { recursive: true });
 }
@@ -80,39 +86,65 @@ if (!fs.existsSync(typesDir)) {
   fs.mkdirSync(typesDir, { recursive: true });
 }
 
-const abiFiles = fs.readdirSync(deploymentsDir)
-  .filter(file => file.endsWith('.json') && file !== 'deployments.json');
+const contractNames = new Set<string>();
+
+for (const chainId in deployments) {
+  for (const contractName in deployments[chainId]) {
+    const name = contractName.replace('Proxy', '');
+    contractNames.add(name);
+  }
+}
+
+console.log(`  Found ${contractNames.size} contracts from deployments:`, Array.from(contractNames));
 
 const artifactFiles: string[] = [];
 
-for (const abiFile of abiFiles) {
-  const contractName = abiFile.replace('.json', '');
-  const abiPath = path.join(deploymentsDir, abiFile);
-  const abi = JSON.parse(fs.readFileSync(abiPath, 'utf-8'));
+for (const contractName of contractNames) {
+  const deploymentsAbiPath = path.join(deploymentsDir, `${contractName}.json`);
+  const outAbiPath = path.join(outDir, `${contractName}.sol`, `${contractName}.json`);
   
-  const artifact = {
-    abi: abi,
-    contractName: contractName,
-    sourceName: `${contractName}.sol`
-  };
+  let abi: any[] | null = null;
+  let abiPath: string | null = null;
   
-  const artifactPath = path.join(artifactsDir, abiFile);
-  fs.writeFileSync(artifactPath, JSON.stringify(artifact, null, 2));
-  artifactFiles.push(artifactPath);
-  console.log(`  ✓ Prepared ${contractName}.json`);
+  if (fs.existsSync(deploymentsAbiPath)) {
+    abiPath = deploymentsAbiPath;
+    abi = JSON.parse(fs.readFileSync(deploymentsAbiPath, 'utf-8'));
+  } else if (fs.existsSync(outAbiPath)) {
+    abiPath = outAbiPath;
+    const artifact = JSON.parse(fs.readFileSync(outAbiPath, 'utf-8'));
+    abi = artifact.abi;
+    const deploymentsAbiOutput = path.join(deploymentsDir, `${contractName}.json`);
+    fs.writeFileSync(deploymentsAbiOutput, JSON.stringify(abi, null, 2));
+    console.log(`  ✓ Extracted ABI for ${contractName} from out/`);
+  }
+  
+  if (abi && Array.isArray(abi)) {
+    const artifact = {
+      abi: abi,
+      contractName: contractName,
+      sourceName: `${contractName}.sol`
+    };
+    
+    const artifactPath = path.join(artifactsDir, `${contractName}.json`);
+    fs.writeFileSync(artifactPath, JSON.stringify(artifact, null, 2));
+    artifactFiles.push(artifactPath);
+    console.log(`  ✓ Prepared artifact for ${contractName}`);
+  } else {
+    console.error(`  ❌ Could not find ABI for ${contractName}`);
+  }
+}
+
+if (artifactFiles.length === 0) {
+  console.error('  ❌ No artifacts were prepared');
+  process.exit(1);
 }
 
 console.log(`\nStep 3: Running TypeChain...`);
 
-if (artifactFiles.length === 0) {
-  console.log('  ⚠ No artifact files found, skipping type generation');
-  process.exit(0);
-}
-
 const files = artifactFiles.join(' ');
 
 try {
-  const cmd = `npx --yes typechain --out-dir ${typesDir} ${files} --target ethers-v5`;
+  const cmd = `npx --yes typechain --out-dir ${typesDir} ${files} --target ethers-v6`;
   execSync(cmd, { stdio: 'inherit', cwd: path.join(__dirname, '..') });
   
   const generatedFiles = fs.readdirSync(typesDir);

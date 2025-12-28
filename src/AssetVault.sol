@@ -157,14 +157,6 @@ contract AssetVault is
     // Fee events
     event FeesWithdrawn(address[] tokens, uint256[] amounts, address to);
 
-    modifier onlySupportedToken(address token) {
-        require(
-            supportedTokens[token].hardCapRatioBps > 0,
-            "token not supported"
-        );
-        _;
-    }
-
     constructor() {
         _disableInitializers();
     }
@@ -266,7 +258,8 @@ contract AssetVault is
 
     function removeToken(
         address token
-    ) external onlyRole(ADMIN_ROLE) onlySupportedToken(token) {
+    ) external onlyRole(ADMIN_ROLE) {
+        _ensureTokenSupported(token);
         delete supportedTokens[token];
         emit TokenRemoved(token);
     }
@@ -275,7 +268,8 @@ contract AssetVault is
         address token,
         uint256 hardCapRatioBps,
         uint256 refillRateMps
-    ) external onlyRole(ADMIN_ROLE) onlySupportedToken(token) {
+    ) external onlyRole(ADMIN_ROLE) {
+        _ensureTokenSupported(token);
         _validateToken(hardCapRatioBps, refillRateMps);
         supportedTokens[token].hardCapRatioBps = hardCapRatioBps;
         supportedTokens[token].refillRateMps = refillRateMps;
@@ -285,7 +279,8 @@ contract AssetVault is
     function deposit(
         address token,
         uint256 amount
-    ) external payable whenNotPaused onlySupportedToken(token) nonReentrant {
+    ) external payable whenNotPaused nonReentrant {
+        _ensureTokenSupported(token);
         require(amount > 0, "zero amount");
         if (token == address(0)) {
             require(amount == msg.value, "value mismatch");
@@ -315,9 +310,9 @@ contract AssetVault is
         payable
         whenNotPaused
         onlyRole(OPERATOR_ROLE)
-        onlySupportedToken(action.token)
         nonReentrant
     {
+        _ensureTokenSupported(action.token);
         _refillWithdrawHotAmount(action.token);
 
         bytes32 digest = keccak256(
@@ -405,6 +400,36 @@ contract AssetVault is
             withdrawal.paused,
             withdrawal.withdrawType
         );
+    }
+
+    function batchFlushWithdrawals(
+        uint256[] calldata ids,
+        ValidatorInfo[] calldata validators,
+        bytes[] calldata validatorSignatures
+    ) external whenNotPaused onlyRole(OPERATOR_ROLE) nonReentrant {
+        require(ids.length > 0, "empty ids");
+        bytes32 digest = keccak256(
+            abi.encode(
+                "batchFlush",
+                ids,
+                block.chainid,
+                address(this)
+            )
+        );
+        _verifyValidatorSignature(validators, digest, validatorSignatures);
+        for (uint256 i = 0; i < ids.length; i++) {
+            _flushWithdrawal(ids[i]);
+        }
+    }
+
+    function batchResetWithdrawHotAmount(address[] calldata tokens) external onlyRole(OPERATOR_ROLE) {
+        require(tokens.length > 0, "empty tokens");
+        for (uint256 i = 0; i < tokens.length; i++) {
+            _ensureTokenSupported(tokens[i]);
+            supportedTokens[tokens[i]].usedWithdrawHotAmount = 0;
+            supportedTokens[tokens[i]].lastRefillTimestamp = block.timestamp;
+            emit WithdrawHotAmountRefilled(tokens[i], 0, 0);
+        }
     }
 
     // ================================ Internal Functions ================================
@@ -575,6 +600,13 @@ contract AssetVault is
             true,
             withdrawal.paused,
             withdrawal.withdrawType
+        );
+    }
+
+    function _ensureTokenSupported(address token) internal view {
+        require(
+            supportedTokens[token].hardCapRatioBps > 0,
+            "token not supported"
         );
     }
 

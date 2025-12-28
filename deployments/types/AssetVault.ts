@@ -3,104 +3,58 @@
 /* eslint-disable */
 import type {
   BaseContract,
-  BigNumber,
   BigNumberish,
   BytesLike,
-  CallOverrides,
-  ContractTransaction,
-  Overrides,
-  PayableOverrides,
-  PopulatedTransaction,
-  Signer,
-  utils,
-} from "ethers";
-import type {
   FunctionFragment,
   Result,
+  Interface,
   EventFragment,
-} from "@ethersproject/abi";
-import type { Listener, Provider } from "@ethersproject/providers";
+  AddressLike,
+  ContractRunner,
+  ContractMethod,
+  Listener,
+} from "ethers";
 import type {
-  TypedEventFilter,
-  TypedEvent,
+  TypedContractEvent,
+  TypedDeferredTopicFilter,
+  TypedEventLog,
+  TypedLogDescription,
   TypedListener,
-  OnEvent,
-  PromiseOrValue,
+  TypedContractMethod,
 } from "./common";
 
-export type ValidatorInfoStruct = {
-  signer: PromiseOrValue<string>;
-  power: PromiseOrValue<BigNumberish>;
-};
+export type ValidatorInfoStruct = { signer: AddressLike; power: BigNumberish };
 
-export type ValidatorInfoStructOutput = [string, BigNumber] & {
+export type ValidatorInfoStructOutput = [signer: string, power: bigint] & {
   signer: string;
-  power: BigNumber;
+  power: bigint;
 };
 
 export type WithdrawActionStruct = {
-  token: PromiseOrValue<string>;
-  amount: PromiseOrValue<BigNumberish>;
-  fee: PromiseOrValue<BigNumberish>;
-  receiver: PromiseOrValue<string>;
-  withdrawType: PromiseOrValue<BigNumberish>;
+  token: AddressLike;
+  amount: BigNumberish;
+  fee: BigNumberish;
+  receiver: AddressLike;
+  withdrawType: BigNumberish;
 };
 
 export type WithdrawActionStructOutput = [
-  string,
-  BigNumber,
-  BigNumber,
-  string,
-  number
+  token: string,
+  amount: bigint,
+  fee: bigint,
+  receiver: string,
+  withdrawType: bigint
 ] & {
   token: string;
-  amount: BigNumber;
-  fee: BigNumber;
+  amount: bigint;
+  fee: bigint;
   receiver: string;
-  withdrawType: number;
+  withdrawType: bigint;
 };
 
-export interface AssetVaultInterface extends utils.Interface {
-  functions: {
-    "ADMIN_ROLE()": FunctionFragment;
-    "DEFAULT_ADMIN_ROLE()": FunctionFragment;
-    "OPERATOR_ROLE()": FunctionFragment;
-    "PAUSE_ROLE()": FunctionFragment;
-    "TOKEN_ROLE()": FunctionFragment;
-    "UPGRADE_INTERFACE_VERSION()": FunctionFragment;
-    "UPGRADE_ROLE()": FunctionFragment;
-    "addToken(address,uint256,uint256)": FunctionFragment;
-    "addValidators((address,uint256)[])": FunctionFragment;
-    "availableValidators(bytes32)": FunctionFragment;
-    "deposit(address,uint256)": FunctionFragment;
-    "executeWithdrawal(uint256)": FunctionFragment;
-    "fees(address)": FunctionFragment;
-    "getRoleAdmin(bytes32)": FunctionFragment;
-    "grantRole(bytes32,address)": FunctionFragment;
-    "hasRole(bytes32,address)": FunctionFragment;
-    "initialize(uint256)": FunctionFragment;
-    "pause()": FunctionFragment;
-    "paused()": FunctionFragment;
-    "pendingWithdrawChallengePeriod()": FunctionFragment;
-    "pendingWithdrawalIds(uint256)": FunctionFragment;
-    "proxiableUUID()": FunctionFragment;
-    "removeToken(address)": FunctionFragment;
-    "removeValidators((address,uint256)[])": FunctionFragment;
-    "renounceRole(bytes32,address)": FunctionFragment;
-    "revokeRole(bytes32,address)": FunctionFragment;
-    "supportedTokens(address)": FunctionFragment;
-    "supportsInterface(bytes4)": FunctionFragment;
-    "unpause()": FunctionFragment;
-    "updatePendingWithdrawChallengePeriod(uint256)": FunctionFragment;
-    "updateToken(address,uint256,uint256)": FunctionFragment;
-    "upgradeToAndCall(address,bytes)": FunctionFragment;
-    "withdraw(uint256,(address,uint256)[],(address,uint256,uint256,address,uint8),bytes[])": FunctionFragment;
-    "withdrawFees(address[],uint256[],address)": FunctionFragment;
-    "withdrawals(uint256)": FunctionFragment;
-  };
-
+export interface AssetVaultInterface extends Interface {
   getFunction(
-    nameOrSignatureOrTopic:
+    nameOrSignature:
       | "ADMIN_ROLE"
       | "DEFAULT_ADMIN_ROLE"
       | "OPERATOR_ROLE"
@@ -138,6 +92,30 @@ export interface AssetVaultInterface extends utils.Interface {
       | "withdrawals"
   ): FunctionFragment;
 
+  getEvent(
+    nameOrSignatureOrTopic:
+      | "Deposit"
+      | "FeesWithdrawn"
+      | "Initialized"
+      | "Paused"
+      | "PendingWithdrawChallengePeriodUpdated"
+      | "PendingWithdrawalToggled"
+      | "RoleAdminChanged"
+      | "RoleGranted"
+      | "RoleRevoked"
+      | "TokenAdded"
+      | "TokenRemoved"
+      | "TokenUpdated"
+      | "Unpaused"
+      | "Upgraded"
+      | "ValidatorsAdded"
+      | "ValidatorsRemoved"
+      | "WithdrawExecuted"
+      | "WithdrawHotAmountRefilled"
+      | "WithdrawHotAmountUsed"
+      | "WithdrawalAdded"
+  ): EventFragment;
+
   encodeFunctionData(
     functionFragment: "ADMIN_ROLE",
     values?: undefined
@@ -168,11 +146,7 @@ export interface AssetVaultInterface extends utils.Interface {
   ): string;
   encodeFunctionData(
     functionFragment: "addToken",
-    values: [
-      PromiseOrValue<string>,
-      PromiseOrValue<BigNumberish>,
-      PromiseOrValue<BigNumberish>
-    ]
+    values: [AddressLike, BigNumberish, BigNumberish]
   ): string;
   encodeFunctionData(
     functionFragment: "addValidators",
@@ -180,35 +154,32 @@ export interface AssetVaultInterface extends utils.Interface {
   ): string;
   encodeFunctionData(
     functionFragment: "availableValidators",
-    values: [PromiseOrValue<BytesLike>]
+    values: [BytesLike]
   ): string;
   encodeFunctionData(
     functionFragment: "deposit",
-    values: [PromiseOrValue<string>, PromiseOrValue<BigNumberish>]
+    values: [AddressLike, BigNumberish]
   ): string;
   encodeFunctionData(
     functionFragment: "executeWithdrawal",
-    values: [PromiseOrValue<BigNumberish>]
+    values: [BigNumberish]
   ): string;
-  encodeFunctionData(
-    functionFragment: "fees",
-    values: [PromiseOrValue<string>]
-  ): string;
+  encodeFunctionData(functionFragment: "fees", values: [AddressLike]): string;
   encodeFunctionData(
     functionFragment: "getRoleAdmin",
-    values: [PromiseOrValue<BytesLike>]
+    values: [BytesLike]
   ): string;
   encodeFunctionData(
     functionFragment: "grantRole",
-    values: [PromiseOrValue<BytesLike>, PromiseOrValue<string>]
+    values: [BytesLike, AddressLike]
   ): string;
   encodeFunctionData(
     functionFragment: "hasRole",
-    values: [PromiseOrValue<BytesLike>, PromiseOrValue<string>]
+    values: [BytesLike, AddressLike]
   ): string;
   encodeFunctionData(
     functionFragment: "initialize",
-    values: [PromiseOrValue<BigNumberish>]
+    values: [BigNumberish]
   ): string;
   encodeFunctionData(functionFragment: "pause", values?: undefined): string;
   encodeFunctionData(functionFragment: "paused", values?: undefined): string;
@@ -218,7 +189,7 @@ export interface AssetVaultInterface extends utils.Interface {
   ): string;
   encodeFunctionData(
     functionFragment: "pendingWithdrawalIds",
-    values: [PromiseOrValue<BigNumberish>]
+    values: [BigNumberish]
   ): string;
   encodeFunctionData(
     functionFragment: "proxiableUUID",
@@ -226,7 +197,7 @@ export interface AssetVaultInterface extends utils.Interface {
   ): string;
   encodeFunctionData(
     functionFragment: "removeToken",
-    values: [PromiseOrValue<string>]
+    values: [AddressLike]
   ): string;
   encodeFunctionData(
     functionFragment: "removeValidators",
@@ -234,57 +205,49 @@ export interface AssetVaultInterface extends utils.Interface {
   ): string;
   encodeFunctionData(
     functionFragment: "renounceRole",
-    values: [PromiseOrValue<BytesLike>, PromiseOrValue<string>]
+    values: [BytesLike, AddressLike]
   ): string;
   encodeFunctionData(
     functionFragment: "revokeRole",
-    values: [PromiseOrValue<BytesLike>, PromiseOrValue<string>]
+    values: [BytesLike, AddressLike]
   ): string;
   encodeFunctionData(
     functionFragment: "supportedTokens",
-    values: [PromiseOrValue<string>]
+    values: [AddressLike]
   ): string;
   encodeFunctionData(
     functionFragment: "supportsInterface",
-    values: [PromiseOrValue<BytesLike>]
+    values: [BytesLike]
   ): string;
   encodeFunctionData(functionFragment: "unpause", values?: undefined): string;
   encodeFunctionData(
     functionFragment: "updatePendingWithdrawChallengePeriod",
-    values: [PromiseOrValue<BigNumberish>]
+    values: [BigNumberish]
   ): string;
   encodeFunctionData(
     functionFragment: "updateToken",
-    values: [
-      PromiseOrValue<string>,
-      PromiseOrValue<BigNumberish>,
-      PromiseOrValue<BigNumberish>
-    ]
+    values: [AddressLike, BigNumberish, BigNumberish]
   ): string;
   encodeFunctionData(
     functionFragment: "upgradeToAndCall",
-    values: [PromiseOrValue<string>, PromiseOrValue<BytesLike>]
+    values: [AddressLike, BytesLike]
   ): string;
   encodeFunctionData(
     functionFragment: "withdraw",
     values: [
-      PromiseOrValue<BigNumberish>,
+      BigNumberish,
       ValidatorInfoStruct[],
       WithdrawActionStruct,
-      PromiseOrValue<BytesLike>[]
+      BytesLike[]
     ]
   ): string;
   encodeFunctionData(
     functionFragment: "withdrawFees",
-    values: [
-      PromiseOrValue<string>[],
-      PromiseOrValue<BigNumberish>[],
-      PromiseOrValue<string>
-    ]
+    values: [AddressLike[], BigNumberish[], AddressLike]
   ): string;
   encodeFunctionData(
     functionFragment: "withdrawals",
-    values: [PromiseOrValue<BigNumberish>]
+    values: [BigNumberish]
   ): string;
 
   decodeFunctionResult(functionFragment: "ADMIN_ROLE", data: BytesLike): Result;
@@ -385,1408 +348,1189 @@ export interface AssetVaultInterface extends utils.Interface {
     functionFragment: "withdrawals",
     data: BytesLike
   ): Result;
-
-  events: {
-    "Deposit(address,address,uint256)": EventFragment;
-    "FeesWithdrawn(address[],uint256[],address)": EventFragment;
-    "Initialized(uint64)": EventFragment;
-    "Paused(address)": EventFragment;
-    "PendingWithdrawChallengePeriodUpdated(uint256,uint256)": EventFragment;
-    "PendingWithdrawalToggled(uint256,bool)": EventFragment;
-    "RoleAdminChanged(bytes32,bytes32,bytes32)": EventFragment;
-    "RoleGranted(bytes32,address,address)": EventFragment;
-    "RoleRevoked(bytes32,address,address)": EventFragment;
-    "TokenAdded(address,uint256,uint256)": EventFragment;
-    "TokenRemoved(address)": EventFragment;
-    "TokenUpdated(address,uint256,uint256)": EventFragment;
-    "Unpaused(address)": EventFragment;
-    "Upgraded(address)": EventFragment;
-    "ValidatorsAdded(bytes32,uint256,uint256)": EventFragment;
-    "ValidatorsRemoved(bytes32,uint256)": EventFragment;
-    "WithdrawExecuted(uint256,address,address,uint256,uint256,bool,bool,bool,uint8)": EventFragment;
-    "WithdrawHotAmountRefilled(address,uint256,uint256)": EventFragment;
-    "WithdrawHotAmountUsed(address,uint256,uint256,bool)": EventFragment;
-    "WithdrawalAdded(uint256,address,uint256,uint256,address,uint8,bool)": EventFragment;
-  };
-
-  getEvent(nameOrSignatureOrTopic: "Deposit"): EventFragment;
-  getEvent(nameOrSignatureOrTopic: "FeesWithdrawn"): EventFragment;
-  getEvent(nameOrSignatureOrTopic: "Initialized"): EventFragment;
-  getEvent(nameOrSignatureOrTopic: "Paused"): EventFragment;
-  getEvent(
-    nameOrSignatureOrTopic: "PendingWithdrawChallengePeriodUpdated"
-  ): EventFragment;
-  getEvent(nameOrSignatureOrTopic: "PendingWithdrawalToggled"): EventFragment;
-  getEvent(nameOrSignatureOrTopic: "RoleAdminChanged"): EventFragment;
-  getEvent(nameOrSignatureOrTopic: "RoleGranted"): EventFragment;
-  getEvent(nameOrSignatureOrTopic: "RoleRevoked"): EventFragment;
-  getEvent(nameOrSignatureOrTopic: "TokenAdded"): EventFragment;
-  getEvent(nameOrSignatureOrTopic: "TokenRemoved"): EventFragment;
-  getEvent(nameOrSignatureOrTopic: "TokenUpdated"): EventFragment;
-  getEvent(nameOrSignatureOrTopic: "Unpaused"): EventFragment;
-  getEvent(nameOrSignatureOrTopic: "Upgraded"): EventFragment;
-  getEvent(nameOrSignatureOrTopic: "ValidatorsAdded"): EventFragment;
-  getEvent(nameOrSignatureOrTopic: "ValidatorsRemoved"): EventFragment;
-  getEvent(nameOrSignatureOrTopic: "WithdrawExecuted"): EventFragment;
-  getEvent(nameOrSignatureOrTopic: "WithdrawHotAmountRefilled"): EventFragment;
-  getEvent(nameOrSignatureOrTopic: "WithdrawHotAmountUsed"): EventFragment;
-  getEvent(nameOrSignatureOrTopic: "WithdrawalAdded"): EventFragment;
 }
 
-export interface DepositEventObject {
-  account: string;
-  token: string;
-  amount: BigNumber;
+export namespace DepositEvent {
+  export type InputTuple = [
+    account: AddressLike,
+    token: AddressLike,
+    amount: BigNumberish
+  ];
+  export type OutputTuple = [account: string, token: string, amount: bigint];
+  export interface OutputObject {
+    account: string;
+    token: string;
+    amount: bigint;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
 }
-export type DepositEvent = TypedEvent<
-  [string, string, BigNumber],
-  DepositEventObject
->;
 
-export type DepositEventFilter = TypedEventFilter<DepositEvent>;
-
-export interface FeesWithdrawnEventObject {
-  tokens: string[];
-  amounts: BigNumber[];
-  to: string;
+export namespace FeesWithdrawnEvent {
+  export type InputTuple = [
+    tokens: AddressLike[],
+    amounts: BigNumberish[],
+    to: AddressLike
+  ];
+  export type OutputTuple = [tokens: string[], amounts: bigint[], to: string];
+  export interface OutputObject {
+    tokens: string[];
+    amounts: bigint[];
+    to: string;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
 }
-export type FeesWithdrawnEvent = TypedEvent<
-  [string[], BigNumber[], string],
-  FeesWithdrawnEventObject
->;
 
-export type FeesWithdrawnEventFilter = TypedEventFilter<FeesWithdrawnEvent>;
-
-export interface InitializedEventObject {
-  version: BigNumber;
+export namespace InitializedEvent {
+  export type InputTuple = [version: BigNumberish];
+  export type OutputTuple = [version: bigint];
+  export interface OutputObject {
+    version: bigint;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
 }
-export type InitializedEvent = TypedEvent<[BigNumber], InitializedEventObject>;
 
-export type InitializedEventFilter = TypedEventFilter<InitializedEvent>;
-
-export interface PausedEventObject {
-  account: string;
+export namespace PausedEvent {
+  export type InputTuple = [account: AddressLike];
+  export type OutputTuple = [account: string];
+  export interface OutputObject {
+    account: string;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
 }
-export type PausedEvent = TypedEvent<[string], PausedEventObject>;
 
-export type PausedEventFilter = TypedEventFilter<PausedEvent>;
-
-export interface PendingWithdrawChallengePeriodUpdatedEventObject {
-  oldValue: BigNumber;
-  newValue: BigNumber;
+export namespace PendingWithdrawChallengePeriodUpdatedEvent {
+  export type InputTuple = [oldValue: BigNumberish, newValue: BigNumberish];
+  export type OutputTuple = [oldValue: bigint, newValue: bigint];
+  export interface OutputObject {
+    oldValue: bigint;
+    newValue: bigint;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
 }
-export type PendingWithdrawChallengePeriodUpdatedEvent = TypedEvent<
-  [BigNumber, BigNumber],
-  PendingWithdrawChallengePeriodUpdatedEventObject
->;
 
-export type PendingWithdrawChallengePeriodUpdatedEventFilter =
-  TypedEventFilter<PendingWithdrawChallengePeriodUpdatedEvent>;
-
-export interface PendingWithdrawalToggledEventObject {
-  id: BigNumber;
-  paused: boolean;
+export namespace PendingWithdrawalToggledEvent {
+  export type InputTuple = [id: BigNumberish, paused: boolean];
+  export type OutputTuple = [id: bigint, paused: boolean];
+  export interface OutputObject {
+    id: bigint;
+    paused: boolean;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
 }
-export type PendingWithdrawalToggledEvent = TypedEvent<
-  [BigNumber, boolean],
-  PendingWithdrawalToggledEventObject
->;
 
-export type PendingWithdrawalToggledEventFilter =
-  TypedEventFilter<PendingWithdrawalToggledEvent>;
-
-export interface RoleAdminChangedEventObject {
-  role: string;
-  previousAdminRole: string;
-  newAdminRole: string;
+export namespace RoleAdminChangedEvent {
+  export type InputTuple = [
+    role: BytesLike,
+    previousAdminRole: BytesLike,
+    newAdminRole: BytesLike
+  ];
+  export type OutputTuple = [
+    role: string,
+    previousAdminRole: string,
+    newAdminRole: string
+  ];
+  export interface OutputObject {
+    role: string;
+    previousAdminRole: string;
+    newAdminRole: string;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
 }
-export type RoleAdminChangedEvent = TypedEvent<
-  [string, string, string],
-  RoleAdminChangedEventObject
->;
 
-export type RoleAdminChangedEventFilter =
-  TypedEventFilter<RoleAdminChangedEvent>;
-
-export interface RoleGrantedEventObject {
-  role: string;
-  account: string;
-  sender: string;
+export namespace RoleGrantedEvent {
+  export type InputTuple = [
+    role: BytesLike,
+    account: AddressLike,
+    sender: AddressLike
+  ];
+  export type OutputTuple = [role: string, account: string, sender: string];
+  export interface OutputObject {
+    role: string;
+    account: string;
+    sender: string;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
 }
-export type RoleGrantedEvent = TypedEvent<
-  [string, string, string],
-  RoleGrantedEventObject
->;
 
-export type RoleGrantedEventFilter = TypedEventFilter<RoleGrantedEvent>;
-
-export interface RoleRevokedEventObject {
-  role: string;
-  account: string;
-  sender: string;
+export namespace RoleRevokedEvent {
+  export type InputTuple = [
+    role: BytesLike,
+    account: AddressLike,
+    sender: AddressLike
+  ];
+  export type OutputTuple = [role: string, account: string, sender: string];
+  export interface OutputObject {
+    role: string;
+    account: string;
+    sender: string;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
 }
-export type RoleRevokedEvent = TypedEvent<
-  [string, string, string],
-  RoleRevokedEventObject
->;
 
-export type RoleRevokedEventFilter = TypedEventFilter<RoleRevokedEvent>;
-
-export interface TokenAddedEventObject {
-  token: string;
-  hardCapRatioBps: BigNumber;
-  refillRateMps: BigNumber;
+export namespace TokenAddedEvent {
+  export type InputTuple = [
+    token: AddressLike,
+    hardCapRatioBps: BigNumberish,
+    refillRateMps: BigNumberish
+  ];
+  export type OutputTuple = [
+    token: string,
+    hardCapRatioBps: bigint,
+    refillRateMps: bigint
+  ];
+  export interface OutputObject {
+    token: string;
+    hardCapRatioBps: bigint;
+    refillRateMps: bigint;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
 }
-export type TokenAddedEvent = TypedEvent<
-  [string, BigNumber, BigNumber],
-  TokenAddedEventObject
->;
 
-export type TokenAddedEventFilter = TypedEventFilter<TokenAddedEvent>;
-
-export interface TokenRemovedEventObject {
-  token: string;
+export namespace TokenRemovedEvent {
+  export type InputTuple = [token: AddressLike];
+  export type OutputTuple = [token: string];
+  export interface OutputObject {
+    token: string;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
 }
-export type TokenRemovedEvent = TypedEvent<[string], TokenRemovedEventObject>;
 
-export type TokenRemovedEventFilter = TypedEventFilter<TokenRemovedEvent>;
-
-export interface TokenUpdatedEventObject {
-  token: string;
-  hardCapRatioBps: BigNumber;
-  refillRateMps: BigNumber;
+export namespace TokenUpdatedEvent {
+  export type InputTuple = [
+    token: AddressLike,
+    hardCapRatioBps: BigNumberish,
+    refillRateMps: BigNumberish
+  ];
+  export type OutputTuple = [
+    token: string,
+    hardCapRatioBps: bigint,
+    refillRateMps: bigint
+  ];
+  export interface OutputObject {
+    token: string;
+    hardCapRatioBps: bigint;
+    refillRateMps: bigint;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
 }
-export type TokenUpdatedEvent = TypedEvent<
-  [string, BigNumber, BigNumber],
-  TokenUpdatedEventObject
->;
 
-export type TokenUpdatedEventFilter = TypedEventFilter<TokenUpdatedEvent>;
-
-export interface UnpausedEventObject {
-  account: string;
+export namespace UnpausedEvent {
+  export type InputTuple = [account: AddressLike];
+  export type OutputTuple = [account: string];
+  export interface OutputObject {
+    account: string;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
 }
-export type UnpausedEvent = TypedEvent<[string], UnpausedEventObject>;
 
-export type UnpausedEventFilter = TypedEventFilter<UnpausedEvent>;
-
-export interface UpgradedEventObject {
-  implementation: string;
+export namespace UpgradedEvent {
+  export type InputTuple = [implementation: AddressLike];
+  export type OutputTuple = [implementation: string];
+  export interface OutputObject {
+    implementation: string;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
 }
-export type UpgradedEvent = TypedEvent<[string], UpgradedEventObject>;
 
-export type UpgradedEventFilter = TypedEventFilter<UpgradedEvent>;
-
-export interface ValidatorsAddedEventObject {
-  hash: string;
-  count: BigNumber;
-  totalPower: BigNumber;
+export namespace ValidatorsAddedEvent {
+  export type InputTuple = [
+    hash: BytesLike,
+    count: BigNumberish,
+    totalPower: BigNumberish
+  ];
+  export type OutputTuple = [hash: string, count: bigint, totalPower: bigint];
+  export interface OutputObject {
+    hash: string;
+    count: bigint;
+    totalPower: bigint;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
 }
-export type ValidatorsAddedEvent = TypedEvent<
-  [string, BigNumber, BigNumber],
-  ValidatorsAddedEventObject
->;
 
-export type ValidatorsAddedEventFilter = TypedEventFilter<ValidatorsAddedEvent>;
-
-export interface ValidatorsRemovedEventObject {
-  hash: string;
-  count: BigNumber;
+export namespace ValidatorsRemovedEvent {
+  export type InputTuple = [hash: BytesLike, count: BigNumberish];
+  export type OutputTuple = [hash: string, count: bigint];
+  export interface OutputObject {
+    hash: string;
+    count: bigint;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
 }
-export type ValidatorsRemovedEvent = TypedEvent<
-  [string, BigNumber],
-  ValidatorsRemovedEventObject
->;
 
-export type ValidatorsRemovedEventFilter =
-  TypedEventFilter<ValidatorsRemovedEvent>;
-
-export interface WithdrawExecutedEventObject {
-  id: BigNumber;
-  to: string;
-  token: string;
-  amount: BigNumber;
-  fee: BigNumber;
-  isPending: boolean;
-  isFlushed: boolean;
-  isPaused: boolean;
-  withdrawType: number;
+export namespace WithdrawExecutedEvent {
+  export type InputTuple = [
+    id: BigNumberish,
+    to: AddressLike,
+    token: AddressLike,
+    amount: BigNumberish,
+    fee: BigNumberish,
+    isPending: boolean,
+    isFlushed: boolean,
+    isPaused: boolean,
+    withdrawType: BigNumberish
+  ];
+  export type OutputTuple = [
+    id: bigint,
+    to: string,
+    token: string,
+    amount: bigint,
+    fee: bigint,
+    isPending: boolean,
+    isFlushed: boolean,
+    isPaused: boolean,
+    withdrawType: bigint
+  ];
+  export interface OutputObject {
+    id: bigint;
+    to: string;
+    token: string;
+    amount: bigint;
+    fee: bigint;
+    isPending: boolean;
+    isFlushed: boolean;
+    isPaused: boolean;
+    withdrawType: bigint;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
 }
-export type WithdrawExecutedEvent = TypedEvent<
-  [
-    BigNumber,
-    string,
-    string,
-    BigNumber,
-    BigNumber,
-    boolean,
-    boolean,
-    boolean,
-    number
-  ],
-  WithdrawExecutedEventObject
->;
 
-export type WithdrawExecutedEventFilter =
-  TypedEventFilter<WithdrawExecutedEvent>;
-
-export interface WithdrawHotAmountRefilledEventObject {
-  token: string;
-  refillAmount: BigNumber;
-  usedWithdrawHotAmount: BigNumber;
+export namespace WithdrawHotAmountRefilledEvent {
+  export type InputTuple = [
+    token: AddressLike,
+    refillAmount: BigNumberish,
+    usedWithdrawHotAmount: BigNumberish
+  ];
+  export type OutputTuple = [
+    token: string,
+    refillAmount: bigint,
+    usedWithdrawHotAmount: bigint
+  ];
+  export interface OutputObject {
+    token: string;
+    refillAmount: bigint;
+    usedWithdrawHotAmount: bigint;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
 }
-export type WithdrawHotAmountRefilledEvent = TypedEvent<
-  [string, BigNumber, BigNumber],
-  WithdrawHotAmountRefilledEventObject
->;
 
-export type WithdrawHotAmountRefilledEventFilter =
-  TypedEventFilter<WithdrawHotAmountRefilledEvent>;
-
-export interface WithdrawHotAmountUsedEventObject {
-  token: string;
-  amount: BigNumber;
-  updateUsedWithdrawHotAmount: BigNumber;
-  forcePending: boolean;
+export namespace WithdrawHotAmountUsedEvent {
+  export type InputTuple = [
+    token: AddressLike,
+    amount: BigNumberish,
+    updateUsedWithdrawHotAmount: BigNumberish,
+    forcePending: boolean
+  ];
+  export type OutputTuple = [
+    token: string,
+    amount: bigint,
+    updateUsedWithdrawHotAmount: bigint,
+    forcePending: boolean
+  ];
+  export interface OutputObject {
+    token: string;
+    amount: bigint;
+    updateUsedWithdrawHotAmount: bigint;
+    forcePending: boolean;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
 }
-export type WithdrawHotAmountUsedEvent = TypedEvent<
-  [string, BigNumber, BigNumber, boolean],
-  WithdrawHotAmountUsedEventObject
->;
 
-export type WithdrawHotAmountUsedEventFilter =
-  TypedEventFilter<WithdrawHotAmountUsedEvent>;
-
-export interface WithdrawalAddedEventObject {
-  id: BigNumber;
-  token: string;
-  amount: BigNumber;
-  fee: BigNumber;
-  receiver: string;
-  withdrawType: number;
-  isPending: boolean;
+export namespace WithdrawalAddedEvent {
+  export type InputTuple = [
+    id: BigNumberish,
+    token: AddressLike,
+    amount: BigNumberish,
+    fee: BigNumberish,
+    receiver: AddressLike,
+    withdrawType: BigNumberish,
+    isPending: boolean
+  ];
+  export type OutputTuple = [
+    id: bigint,
+    token: string,
+    amount: bigint,
+    fee: bigint,
+    receiver: string,
+    withdrawType: bigint,
+    isPending: boolean
+  ];
+  export interface OutputObject {
+    id: bigint;
+    token: string;
+    amount: bigint;
+    fee: bigint;
+    receiver: string;
+    withdrawType: bigint;
+    isPending: boolean;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
 }
-export type WithdrawalAddedEvent = TypedEvent<
-  [BigNumber, string, BigNumber, BigNumber, string, number, boolean],
-  WithdrawalAddedEventObject
->;
-
-export type WithdrawalAddedEventFilter = TypedEventFilter<WithdrawalAddedEvent>;
 
 export interface AssetVault extends BaseContract {
-  connect(signerOrProvider: Signer | Provider | string): this;
-  attach(addressOrName: string): this;
-  deployed(): Promise<this>;
+  connect(runner?: ContractRunner | null): AssetVault;
+  waitForDeployment(): Promise<this>;
 
   interface: AssetVaultInterface;
 
-  queryFilter<TEvent extends TypedEvent>(
-    event: TypedEventFilter<TEvent>,
+  queryFilter<TCEvent extends TypedContractEvent>(
+    event: TCEvent,
     fromBlockOrBlockhash?: string | number | undefined,
     toBlock?: string | number | undefined
-  ): Promise<Array<TEvent>>;
-
-  listeners<TEvent extends TypedEvent>(
-    eventFilter?: TypedEventFilter<TEvent>
-  ): Array<TypedListener<TEvent>>;
-  listeners(eventName?: string): Array<Listener>;
-  removeAllListeners<TEvent extends TypedEvent>(
-    eventFilter: TypedEventFilter<TEvent>
-  ): this;
-  removeAllListeners(eventName?: string): this;
-  off: OnEvent<this>;
-  on: OnEvent<this>;
-  once: OnEvent<this>;
-  removeListener: OnEvent<this>;
-
-  functions: {
-    ADMIN_ROLE(overrides?: CallOverrides): Promise<[string]>;
-
-    DEFAULT_ADMIN_ROLE(overrides?: CallOverrides): Promise<[string]>;
-
-    OPERATOR_ROLE(overrides?: CallOverrides): Promise<[string]>;
-
-    PAUSE_ROLE(overrides?: CallOverrides): Promise<[string]>;
-
-    TOKEN_ROLE(overrides?: CallOverrides): Promise<[string]>;
-
-    UPGRADE_INTERFACE_VERSION(overrides?: CallOverrides): Promise<[string]>;
-
-    UPGRADE_ROLE(overrides?: CallOverrides): Promise<[string]>;
-
-    addToken(
-      token: PromiseOrValue<string>,
-      hardCapRatioBps: PromiseOrValue<BigNumberish>,
-      refillRateMps: PromiseOrValue<BigNumberish>,
-      overrides?: Overrides & { from?: PromiseOrValue<string> }
-    ): Promise<ContractTransaction>;
-
-    addValidators(
-      validators: ValidatorInfoStruct[],
-      overrides?: Overrides & { from?: PromiseOrValue<string> }
-    ): Promise<ContractTransaction>;
-
-    availableValidators(
-      arg0: PromiseOrValue<BytesLike>,
-      overrides?: CallOverrides
-    ): Promise<[BigNumber]>;
-
-    deposit(
-      token: PromiseOrValue<string>,
-      amount: PromiseOrValue<BigNumberish>,
-      overrides?: PayableOverrides & { from?: PromiseOrValue<string> }
-    ): Promise<ContractTransaction>;
-
-    executeWithdrawal(
-      id: PromiseOrValue<BigNumberish>,
-      overrides?: Overrides & { from?: PromiseOrValue<string> }
-    ): Promise<ContractTransaction>;
-
-    fees(
-      arg0: PromiseOrValue<string>,
-      overrides?: CallOverrides
-    ): Promise<[BigNumber]>;
-
-    getRoleAdmin(
-      role: PromiseOrValue<BytesLike>,
-      overrides?: CallOverrides
-    ): Promise<[string]>;
-
-    grantRole(
-      role: PromiseOrValue<BytesLike>,
-      account: PromiseOrValue<string>,
-      overrides?: Overrides & { from?: PromiseOrValue<string> }
-    ): Promise<ContractTransaction>;
-
-    hasRole(
-      role: PromiseOrValue<BytesLike>,
-      account: PromiseOrValue<string>,
-      overrides?: CallOverrides
-    ): Promise<[boolean]>;
-
-    initialize(
-      _pendingWithdrawChallengePeriod: PromiseOrValue<BigNumberish>,
-      overrides?: Overrides & { from?: PromiseOrValue<string> }
-    ): Promise<ContractTransaction>;
-
-    pause(
-      overrides?: Overrides & { from?: PromiseOrValue<string> }
-    ): Promise<ContractTransaction>;
-
-    paused(overrides?: CallOverrides): Promise<[boolean]>;
-
-    pendingWithdrawChallengePeriod(
-      overrides?: CallOverrides
-    ): Promise<[BigNumber]>;
-
-    pendingWithdrawalIds(
-      arg0: PromiseOrValue<BigNumberish>,
-      overrides?: CallOverrides
-    ): Promise<[BigNumber]>;
-
-    proxiableUUID(overrides?: CallOverrides): Promise<[string]>;
-
-    removeToken(
-      token: PromiseOrValue<string>,
-      overrides?: Overrides & { from?: PromiseOrValue<string> }
-    ): Promise<ContractTransaction>;
-
-    removeValidators(
-      validators: ValidatorInfoStruct[],
-      overrides?: Overrides & { from?: PromiseOrValue<string> }
-    ): Promise<ContractTransaction>;
-
-    renounceRole(
-      role: PromiseOrValue<BytesLike>,
-      callerConfirmation: PromiseOrValue<string>,
-      overrides?: Overrides & { from?: PromiseOrValue<string> }
-    ): Promise<ContractTransaction>;
-
-    revokeRole(
-      role: PromiseOrValue<BytesLike>,
-      account: PromiseOrValue<string>,
-      overrides?: Overrides & { from?: PromiseOrValue<string> }
-    ): Promise<ContractTransaction>;
-
-    supportedTokens(
-      arg0: PromiseOrValue<string>,
-      overrides?: CallOverrides
-    ): Promise<
-      [string, BigNumber, BigNumber, BigNumber, BigNumber] & {
-        token: string;
-        hardCapRatioBps: BigNumber;
-        refillRateMps: BigNumber;
-        lastRefillTimestamp: BigNumber;
-        usedWithdrawHotAmount: BigNumber;
-      }
-    >;
-
-    supportsInterface(
-      interfaceId: PromiseOrValue<BytesLike>,
-      overrides?: CallOverrides
-    ): Promise<[boolean]>;
-
-    unpause(
-      overrides?: Overrides & { from?: PromiseOrValue<string> }
-    ): Promise<ContractTransaction>;
-
-    updatePendingWithdrawChallengePeriod(
-      newValue: PromiseOrValue<BigNumberish>,
-      overrides?: Overrides & { from?: PromiseOrValue<string> }
-    ): Promise<ContractTransaction>;
-
-    updateToken(
-      token: PromiseOrValue<string>,
-      hardCapRatioBps: PromiseOrValue<BigNumberish>,
-      refillRateMps: PromiseOrValue<BigNumberish>,
-      overrides?: Overrides & { from?: PromiseOrValue<string> }
-    ): Promise<ContractTransaction>;
-
-    upgradeToAndCall(
-      newImplementation: PromiseOrValue<string>,
-      data: PromiseOrValue<BytesLike>,
-      overrides?: PayableOverrides & { from?: PromiseOrValue<string> }
-    ): Promise<ContractTransaction>;
-
-    withdraw(
-      id: PromiseOrValue<BigNumberish>,
-      validators: ValidatorInfoStruct[],
-      action: WithdrawActionStruct,
-      validatorSignatures: PromiseOrValue<BytesLike>[],
-      overrides?: PayableOverrides & { from?: PromiseOrValue<string> }
-    ): Promise<ContractTransaction>;
-
-    withdrawFees(
-      tokens: PromiseOrValue<string>[],
-      amounts: PromiseOrValue<BigNumberish>[],
-      to: PromiseOrValue<string>,
-      overrides?: Overrides & { from?: PromiseOrValue<string> }
-    ): Promise<ContractTransaction>;
-
-    withdrawals(
-      arg0: PromiseOrValue<BigNumberish>,
-      overrides?: CallOverrides
-    ): Promise<
-      [
-        boolean,
-        boolean,
-        boolean,
-        BigNumber,
-        string,
-        BigNumber,
-        string,
-        BigNumber,
-        number
-      ] & {
-        paused: boolean;
-        pending: boolean;
-        executed: boolean;
-        amount: BigNumber;
-        token: string;
-        fee: BigNumber;
-        receiver: string;
-        timestamp: BigNumber;
-        withdrawType: number;
-      }
-    >;
-  };
-
-  ADMIN_ROLE(overrides?: CallOverrides): Promise<string>;
-
-  DEFAULT_ADMIN_ROLE(overrides?: CallOverrides): Promise<string>;
-
-  OPERATOR_ROLE(overrides?: CallOverrides): Promise<string>;
-
-  PAUSE_ROLE(overrides?: CallOverrides): Promise<string>;
-
-  TOKEN_ROLE(overrides?: CallOverrides): Promise<string>;
-
-  UPGRADE_INTERFACE_VERSION(overrides?: CallOverrides): Promise<string>;
-
-  UPGRADE_ROLE(overrides?: CallOverrides): Promise<string>;
-
-  addToken(
-    token: PromiseOrValue<string>,
-    hardCapRatioBps: PromiseOrValue<BigNumberish>,
-    refillRateMps: PromiseOrValue<BigNumberish>,
-    overrides?: Overrides & { from?: PromiseOrValue<string> }
-  ): Promise<ContractTransaction>;
-
-  addValidators(
-    validators: ValidatorInfoStruct[],
-    overrides?: Overrides & { from?: PromiseOrValue<string> }
-  ): Promise<ContractTransaction>;
-
-  availableValidators(
-    arg0: PromiseOrValue<BytesLike>,
-    overrides?: CallOverrides
-  ): Promise<BigNumber>;
-
-  deposit(
-    token: PromiseOrValue<string>,
-    amount: PromiseOrValue<BigNumberish>,
-    overrides?: PayableOverrides & { from?: PromiseOrValue<string> }
-  ): Promise<ContractTransaction>;
-
-  executeWithdrawal(
-    id: PromiseOrValue<BigNumberish>,
-    overrides?: Overrides & { from?: PromiseOrValue<string> }
-  ): Promise<ContractTransaction>;
-
-  fees(
-    arg0: PromiseOrValue<string>,
-    overrides?: CallOverrides
-  ): Promise<BigNumber>;
-
-  getRoleAdmin(
-    role: PromiseOrValue<BytesLike>,
-    overrides?: CallOverrides
-  ): Promise<string>;
-
-  grantRole(
-    role: PromiseOrValue<BytesLike>,
-    account: PromiseOrValue<string>,
-    overrides?: Overrides & { from?: PromiseOrValue<string> }
-  ): Promise<ContractTransaction>;
-
-  hasRole(
-    role: PromiseOrValue<BytesLike>,
-    account: PromiseOrValue<string>,
-    overrides?: CallOverrides
-  ): Promise<boolean>;
-
-  initialize(
-    _pendingWithdrawChallengePeriod: PromiseOrValue<BigNumberish>,
-    overrides?: Overrides & { from?: PromiseOrValue<string> }
-  ): Promise<ContractTransaction>;
-
-  pause(
-    overrides?: Overrides & { from?: PromiseOrValue<string> }
-  ): Promise<ContractTransaction>;
-
-  paused(overrides?: CallOverrides): Promise<boolean>;
-
-  pendingWithdrawChallengePeriod(overrides?: CallOverrides): Promise<BigNumber>;
-
-  pendingWithdrawalIds(
-    arg0: PromiseOrValue<BigNumberish>,
-    overrides?: CallOverrides
-  ): Promise<BigNumber>;
-
-  proxiableUUID(overrides?: CallOverrides): Promise<string>;
-
-  removeToken(
-    token: PromiseOrValue<string>,
-    overrides?: Overrides & { from?: PromiseOrValue<string> }
-  ): Promise<ContractTransaction>;
-
-  removeValidators(
-    validators: ValidatorInfoStruct[],
-    overrides?: Overrides & { from?: PromiseOrValue<string> }
-  ): Promise<ContractTransaction>;
-
-  renounceRole(
-    role: PromiseOrValue<BytesLike>,
-    callerConfirmation: PromiseOrValue<string>,
-    overrides?: Overrides & { from?: PromiseOrValue<string> }
-  ): Promise<ContractTransaction>;
-
-  revokeRole(
-    role: PromiseOrValue<BytesLike>,
-    account: PromiseOrValue<string>,
-    overrides?: Overrides & { from?: PromiseOrValue<string> }
-  ): Promise<ContractTransaction>;
-
-  supportedTokens(
-    arg0: PromiseOrValue<string>,
-    overrides?: CallOverrides
-  ): Promise<
-    [string, BigNumber, BigNumber, BigNumber, BigNumber] & {
-      token: string;
-      hardCapRatioBps: BigNumber;
-      refillRateMps: BigNumber;
-      lastRefillTimestamp: BigNumber;
-      usedWithdrawHotAmount: BigNumber;
-    }
-  >;
-
-  supportsInterface(
-    interfaceId: PromiseOrValue<BytesLike>,
-    overrides?: CallOverrides
-  ): Promise<boolean>;
-
-  unpause(
-    overrides?: Overrides & { from?: PromiseOrValue<string> }
-  ): Promise<ContractTransaction>;
-
-  updatePendingWithdrawChallengePeriod(
-    newValue: PromiseOrValue<BigNumberish>,
-    overrides?: Overrides & { from?: PromiseOrValue<string> }
-  ): Promise<ContractTransaction>;
-
-  updateToken(
-    token: PromiseOrValue<string>,
-    hardCapRatioBps: PromiseOrValue<BigNumberish>,
-    refillRateMps: PromiseOrValue<BigNumberish>,
-    overrides?: Overrides & { from?: PromiseOrValue<string> }
-  ): Promise<ContractTransaction>;
-
-  upgradeToAndCall(
-    newImplementation: PromiseOrValue<string>,
-    data: PromiseOrValue<BytesLike>,
-    overrides?: PayableOverrides & { from?: PromiseOrValue<string> }
-  ): Promise<ContractTransaction>;
-
-  withdraw(
-    id: PromiseOrValue<BigNumberish>,
-    validators: ValidatorInfoStruct[],
-    action: WithdrawActionStruct,
-    validatorSignatures: PromiseOrValue<BytesLike>[],
-    overrides?: PayableOverrides & { from?: PromiseOrValue<string> }
-  ): Promise<ContractTransaction>;
-
-  withdrawFees(
-    tokens: PromiseOrValue<string>[],
-    amounts: PromiseOrValue<BigNumberish>[],
-    to: PromiseOrValue<string>,
-    overrides?: Overrides & { from?: PromiseOrValue<string> }
-  ): Promise<ContractTransaction>;
-
-  withdrawals(
-    arg0: PromiseOrValue<BigNumberish>,
-    overrides?: CallOverrides
-  ): Promise<
+  ): Promise<Array<TypedEventLog<TCEvent>>>;
+  queryFilter<TCEvent extends TypedContractEvent>(
+    filter: TypedDeferredTopicFilter<TCEvent>,
+    fromBlockOrBlockhash?: string | number | undefined,
+    toBlock?: string | number | undefined
+  ): Promise<Array<TypedEventLog<TCEvent>>>;
+
+  on<TCEvent extends TypedContractEvent>(
+    event: TCEvent,
+    listener: TypedListener<TCEvent>
+  ): Promise<this>;
+  on<TCEvent extends TypedContractEvent>(
+    filter: TypedDeferredTopicFilter<TCEvent>,
+    listener: TypedListener<TCEvent>
+  ): Promise<this>;
+
+  once<TCEvent extends TypedContractEvent>(
+    event: TCEvent,
+    listener: TypedListener<TCEvent>
+  ): Promise<this>;
+  once<TCEvent extends TypedContractEvent>(
+    filter: TypedDeferredTopicFilter<TCEvent>,
+    listener: TypedListener<TCEvent>
+  ): Promise<this>;
+
+  listeners<TCEvent extends TypedContractEvent>(
+    event: TCEvent
+  ): Promise<Array<TypedListener<TCEvent>>>;
+  listeners(eventName?: string): Promise<Array<Listener>>;
+  removeAllListeners<TCEvent extends TypedContractEvent>(
+    event?: TCEvent
+  ): Promise<this>;
+
+  ADMIN_ROLE: TypedContractMethod<[], [string], "view">;
+
+  DEFAULT_ADMIN_ROLE: TypedContractMethod<[], [string], "view">;
+
+  OPERATOR_ROLE: TypedContractMethod<[], [string], "view">;
+
+  PAUSE_ROLE: TypedContractMethod<[], [string], "view">;
+
+  TOKEN_ROLE: TypedContractMethod<[], [string], "view">;
+
+  UPGRADE_INTERFACE_VERSION: TypedContractMethod<[], [string], "view">;
+
+  UPGRADE_ROLE: TypedContractMethod<[], [string], "view">;
+
+  addToken: TypedContractMethod<
     [
-      boolean,
-      boolean,
-      boolean,
-      BigNumber,
-      string,
-      BigNumber,
-      string,
-      BigNumber,
-      number
-    ] & {
-      paused: boolean;
-      pending: boolean;
-      executed: boolean;
-      amount: BigNumber;
-      token: string;
-      fee: BigNumber;
-      receiver: string;
-      timestamp: BigNumber;
-      withdrawType: number;
-    }
+      token: AddressLike,
+      hardCapRatioBps: BigNumberish,
+      refillRateMps: BigNumberish
+    ],
+    [void],
+    "nonpayable"
   >;
 
-  callStatic: {
-    ADMIN_ROLE(overrides?: CallOverrides): Promise<string>;
+  addValidators: TypedContractMethod<
+    [validators: ValidatorInfoStruct[]],
+    [void],
+    "nonpayable"
+  >;
 
-    DEFAULT_ADMIN_ROLE(overrides?: CallOverrides): Promise<string>;
+  availableValidators: TypedContractMethod<[arg0: BytesLike], [bigint], "view">;
 
-    OPERATOR_ROLE(overrides?: CallOverrides): Promise<string>;
+  deposit: TypedContractMethod<
+    [token: AddressLike, amount: BigNumberish],
+    [void],
+    "payable"
+  >;
 
-    PAUSE_ROLE(overrides?: CallOverrides): Promise<string>;
+  executeWithdrawal: TypedContractMethod<
+    [id: BigNumberish],
+    [void],
+    "nonpayable"
+  >;
 
-    TOKEN_ROLE(overrides?: CallOverrides): Promise<string>;
+  fees: TypedContractMethod<[arg0: AddressLike], [bigint], "view">;
 
-    UPGRADE_INTERFACE_VERSION(overrides?: CallOverrides): Promise<string>;
+  getRoleAdmin: TypedContractMethod<[role: BytesLike], [string], "view">;
 
-    UPGRADE_ROLE(overrides?: CallOverrides): Promise<string>;
+  grantRole: TypedContractMethod<
+    [role: BytesLike, account: AddressLike],
+    [void],
+    "nonpayable"
+  >;
 
-    addToken(
-      token: PromiseOrValue<string>,
-      hardCapRatioBps: PromiseOrValue<BigNumberish>,
-      refillRateMps: PromiseOrValue<BigNumberish>,
-      overrides?: CallOverrides
-    ): Promise<void>;
+  hasRole: TypedContractMethod<
+    [role: BytesLike, account: AddressLike],
+    [boolean],
+    "view"
+  >;
 
-    addValidators(
-      validators: ValidatorInfoStruct[],
-      overrides?: CallOverrides
-    ): Promise<void>;
+  initialize: TypedContractMethod<
+    [_pendingWithdrawChallengePeriod: BigNumberish],
+    [void],
+    "nonpayable"
+  >;
 
-    availableValidators(
-      arg0: PromiseOrValue<BytesLike>,
-      overrides?: CallOverrides
-    ): Promise<BigNumber>;
+  pause: TypedContractMethod<[], [void], "nonpayable">;
 
-    deposit(
-      token: PromiseOrValue<string>,
-      amount: PromiseOrValue<BigNumberish>,
-      overrides?: CallOverrides
-    ): Promise<void>;
+  paused: TypedContractMethod<[], [boolean], "view">;
 
-    executeWithdrawal(
-      id: PromiseOrValue<BigNumberish>,
-      overrides?: CallOverrides
-    ): Promise<void>;
+  pendingWithdrawChallengePeriod: TypedContractMethod<[], [bigint], "view">;
 
-    fees(
-      arg0: PromiseOrValue<string>,
-      overrides?: CallOverrides
-    ): Promise<BigNumber>;
+  pendingWithdrawalIds: TypedContractMethod<
+    [arg0: BigNumberish],
+    [bigint],
+    "view"
+  >;
 
-    getRoleAdmin(
-      role: PromiseOrValue<BytesLike>,
-      overrides?: CallOverrides
-    ): Promise<string>;
+  proxiableUUID: TypedContractMethod<[], [string], "view">;
 
-    grantRole(
-      role: PromiseOrValue<BytesLike>,
-      account: PromiseOrValue<string>,
-      overrides?: CallOverrides
-    ): Promise<void>;
+  removeToken: TypedContractMethod<[token: AddressLike], [void], "nonpayable">;
 
-    hasRole(
-      role: PromiseOrValue<BytesLike>,
-      account: PromiseOrValue<string>,
-      overrides?: CallOverrides
-    ): Promise<boolean>;
+  removeValidators: TypedContractMethod<
+    [validators: ValidatorInfoStruct[]],
+    [void],
+    "nonpayable"
+  >;
 
-    initialize(
-      _pendingWithdrawChallengePeriod: PromiseOrValue<BigNumberish>,
-      overrides?: CallOverrides
-    ): Promise<void>;
+  renounceRole: TypedContractMethod<
+    [role: BytesLike, callerConfirmation: AddressLike],
+    [void],
+    "nonpayable"
+  >;
 
-    pause(overrides?: CallOverrides): Promise<void>;
+  revokeRole: TypedContractMethod<
+    [role: BytesLike, account: AddressLike],
+    [void],
+    "nonpayable"
+  >;
 
-    paused(overrides?: CallOverrides): Promise<boolean>;
-
-    pendingWithdrawChallengePeriod(
-      overrides?: CallOverrides
-    ): Promise<BigNumber>;
-
-    pendingWithdrawalIds(
-      arg0: PromiseOrValue<BigNumberish>,
-      overrides?: CallOverrides
-    ): Promise<BigNumber>;
-
-    proxiableUUID(overrides?: CallOverrides): Promise<string>;
-
-    removeToken(
-      token: PromiseOrValue<string>,
-      overrides?: CallOverrides
-    ): Promise<void>;
-
-    removeValidators(
-      validators: ValidatorInfoStruct[],
-      overrides?: CallOverrides
-    ): Promise<void>;
-
-    renounceRole(
-      role: PromiseOrValue<BytesLike>,
-      callerConfirmation: PromiseOrValue<string>,
-      overrides?: CallOverrides
-    ): Promise<void>;
-
-    revokeRole(
-      role: PromiseOrValue<BytesLike>,
-      account: PromiseOrValue<string>,
-      overrides?: CallOverrides
-    ): Promise<void>;
-
-    supportedTokens(
-      arg0: PromiseOrValue<string>,
-      overrides?: CallOverrides
-    ): Promise<
-      [string, BigNumber, BigNumber, BigNumber, BigNumber] & {
+  supportedTokens: TypedContractMethod<
+    [arg0: AddressLike],
+    [
+      [string, bigint, bigint, bigint, bigint] & {
         token: string;
-        hardCapRatioBps: BigNumber;
-        refillRateMps: BigNumber;
-        lastRefillTimestamp: BigNumber;
-        usedWithdrawHotAmount: BigNumber;
+        hardCapRatioBps: bigint;
+        refillRateMps: bigint;
+        lastRefillTimestamp: bigint;
+        usedWithdrawHotAmount: bigint;
       }
-    >;
+    ],
+    "view"
+  >;
 
-    supportsInterface(
-      interfaceId: PromiseOrValue<BytesLike>,
-      overrides?: CallOverrides
-    ): Promise<boolean>;
+  supportsInterface: TypedContractMethod<
+    [interfaceId: BytesLike],
+    [boolean],
+    "view"
+  >;
 
-    unpause(overrides?: CallOverrides): Promise<void>;
+  unpause: TypedContractMethod<[], [void], "nonpayable">;
 
-    updatePendingWithdrawChallengePeriod(
-      newValue: PromiseOrValue<BigNumberish>,
-      overrides?: CallOverrides
-    ): Promise<void>;
+  updatePendingWithdrawChallengePeriod: TypedContractMethod<
+    [newValue: BigNumberish],
+    [void],
+    "nonpayable"
+  >;
 
-    updateToken(
-      token: PromiseOrValue<string>,
-      hardCapRatioBps: PromiseOrValue<BigNumberish>,
-      refillRateMps: PromiseOrValue<BigNumberish>,
-      overrides?: CallOverrides
-    ): Promise<void>;
+  updateToken: TypedContractMethod<
+    [
+      token: AddressLike,
+      hardCapRatioBps: BigNumberish,
+      refillRateMps: BigNumberish
+    ],
+    [void],
+    "nonpayable"
+  >;
 
-    upgradeToAndCall(
-      newImplementation: PromiseOrValue<string>,
-      data: PromiseOrValue<BytesLike>,
-      overrides?: CallOverrides
-    ): Promise<void>;
+  upgradeToAndCall: TypedContractMethod<
+    [newImplementation: AddressLike, data: BytesLike],
+    [void],
+    "payable"
+  >;
 
-    withdraw(
-      id: PromiseOrValue<BigNumberish>,
+  withdraw: TypedContractMethod<
+    [
+      id: BigNumberish,
       validators: ValidatorInfoStruct[],
       action: WithdrawActionStruct,
-      validatorSignatures: PromiseOrValue<BytesLike>[],
-      overrides?: CallOverrides
-    ): Promise<void>;
+      validatorSignatures: BytesLike[]
+    ],
+    [void],
+    "payable"
+  >;
 
-    withdrawFees(
-      tokens: PromiseOrValue<string>[],
-      amounts: PromiseOrValue<BigNumberish>[],
-      to: PromiseOrValue<string>,
-      overrides?: CallOverrides
-    ): Promise<void>;
+  withdrawFees: TypedContractMethod<
+    [tokens: AddressLike[], amounts: BigNumberish[], to: AddressLike],
+    [void],
+    "nonpayable"
+  >;
 
-    withdrawals(
-      arg0: PromiseOrValue<BigNumberish>,
-      overrides?: CallOverrides
-    ): Promise<
+  withdrawals: TypedContractMethod<
+    [arg0: BigNumberish],
+    [
       [
         boolean,
         boolean,
         boolean,
-        BigNumber,
+        bigint,
         string,
-        BigNumber,
+        bigint,
         string,
-        BigNumber,
-        number
+        bigint,
+        bigint
       ] & {
         paused: boolean;
         pending: boolean;
         executed: boolean;
-        amount: BigNumber;
+        amount: bigint;
         token: string;
-        fee: BigNumber;
+        fee: bigint;
         receiver: string;
-        timestamp: BigNumber;
-        withdrawType: number;
+        timestamp: bigint;
+        withdrawType: bigint;
       }
-    >;
-  };
+    ],
+    "view"
+  >;
+
+  getFunction<T extends ContractMethod = ContractMethod>(
+    key: string | FunctionFragment
+  ): T;
+
+  getFunction(
+    nameOrSignature: "ADMIN_ROLE"
+  ): TypedContractMethod<[], [string], "view">;
+  getFunction(
+    nameOrSignature: "DEFAULT_ADMIN_ROLE"
+  ): TypedContractMethod<[], [string], "view">;
+  getFunction(
+    nameOrSignature: "OPERATOR_ROLE"
+  ): TypedContractMethod<[], [string], "view">;
+  getFunction(
+    nameOrSignature: "PAUSE_ROLE"
+  ): TypedContractMethod<[], [string], "view">;
+  getFunction(
+    nameOrSignature: "TOKEN_ROLE"
+  ): TypedContractMethod<[], [string], "view">;
+  getFunction(
+    nameOrSignature: "UPGRADE_INTERFACE_VERSION"
+  ): TypedContractMethod<[], [string], "view">;
+  getFunction(
+    nameOrSignature: "UPGRADE_ROLE"
+  ): TypedContractMethod<[], [string], "view">;
+  getFunction(
+    nameOrSignature: "addToken"
+  ): TypedContractMethod<
+    [
+      token: AddressLike,
+      hardCapRatioBps: BigNumberish,
+      refillRateMps: BigNumberish
+    ],
+    [void],
+    "nonpayable"
+  >;
+  getFunction(
+    nameOrSignature: "addValidators"
+  ): TypedContractMethod<
+    [validators: ValidatorInfoStruct[]],
+    [void],
+    "nonpayable"
+  >;
+  getFunction(
+    nameOrSignature: "availableValidators"
+  ): TypedContractMethod<[arg0: BytesLike], [bigint], "view">;
+  getFunction(
+    nameOrSignature: "deposit"
+  ): TypedContractMethod<
+    [token: AddressLike, amount: BigNumberish],
+    [void],
+    "payable"
+  >;
+  getFunction(
+    nameOrSignature: "executeWithdrawal"
+  ): TypedContractMethod<[id: BigNumberish], [void], "nonpayable">;
+  getFunction(
+    nameOrSignature: "fees"
+  ): TypedContractMethod<[arg0: AddressLike], [bigint], "view">;
+  getFunction(
+    nameOrSignature: "getRoleAdmin"
+  ): TypedContractMethod<[role: BytesLike], [string], "view">;
+  getFunction(
+    nameOrSignature: "grantRole"
+  ): TypedContractMethod<
+    [role: BytesLike, account: AddressLike],
+    [void],
+    "nonpayable"
+  >;
+  getFunction(
+    nameOrSignature: "hasRole"
+  ): TypedContractMethod<
+    [role: BytesLike, account: AddressLike],
+    [boolean],
+    "view"
+  >;
+  getFunction(
+    nameOrSignature: "initialize"
+  ): TypedContractMethod<
+    [_pendingWithdrawChallengePeriod: BigNumberish],
+    [void],
+    "nonpayable"
+  >;
+  getFunction(
+    nameOrSignature: "pause"
+  ): TypedContractMethod<[], [void], "nonpayable">;
+  getFunction(
+    nameOrSignature: "paused"
+  ): TypedContractMethod<[], [boolean], "view">;
+  getFunction(
+    nameOrSignature: "pendingWithdrawChallengePeriod"
+  ): TypedContractMethod<[], [bigint], "view">;
+  getFunction(
+    nameOrSignature: "pendingWithdrawalIds"
+  ): TypedContractMethod<[arg0: BigNumberish], [bigint], "view">;
+  getFunction(
+    nameOrSignature: "proxiableUUID"
+  ): TypedContractMethod<[], [string], "view">;
+  getFunction(
+    nameOrSignature: "removeToken"
+  ): TypedContractMethod<[token: AddressLike], [void], "nonpayable">;
+  getFunction(
+    nameOrSignature: "removeValidators"
+  ): TypedContractMethod<
+    [validators: ValidatorInfoStruct[]],
+    [void],
+    "nonpayable"
+  >;
+  getFunction(
+    nameOrSignature: "renounceRole"
+  ): TypedContractMethod<
+    [role: BytesLike, callerConfirmation: AddressLike],
+    [void],
+    "nonpayable"
+  >;
+  getFunction(
+    nameOrSignature: "revokeRole"
+  ): TypedContractMethod<
+    [role: BytesLike, account: AddressLike],
+    [void],
+    "nonpayable"
+  >;
+  getFunction(
+    nameOrSignature: "supportedTokens"
+  ): TypedContractMethod<
+    [arg0: AddressLike],
+    [
+      [string, bigint, bigint, bigint, bigint] & {
+        token: string;
+        hardCapRatioBps: bigint;
+        refillRateMps: bigint;
+        lastRefillTimestamp: bigint;
+        usedWithdrawHotAmount: bigint;
+      }
+    ],
+    "view"
+  >;
+  getFunction(
+    nameOrSignature: "supportsInterface"
+  ): TypedContractMethod<[interfaceId: BytesLike], [boolean], "view">;
+  getFunction(
+    nameOrSignature: "unpause"
+  ): TypedContractMethod<[], [void], "nonpayable">;
+  getFunction(
+    nameOrSignature: "updatePendingWithdrawChallengePeriod"
+  ): TypedContractMethod<[newValue: BigNumberish], [void], "nonpayable">;
+  getFunction(
+    nameOrSignature: "updateToken"
+  ): TypedContractMethod<
+    [
+      token: AddressLike,
+      hardCapRatioBps: BigNumberish,
+      refillRateMps: BigNumberish
+    ],
+    [void],
+    "nonpayable"
+  >;
+  getFunction(
+    nameOrSignature: "upgradeToAndCall"
+  ): TypedContractMethod<
+    [newImplementation: AddressLike, data: BytesLike],
+    [void],
+    "payable"
+  >;
+  getFunction(
+    nameOrSignature: "withdraw"
+  ): TypedContractMethod<
+    [
+      id: BigNumberish,
+      validators: ValidatorInfoStruct[],
+      action: WithdrawActionStruct,
+      validatorSignatures: BytesLike[]
+    ],
+    [void],
+    "payable"
+  >;
+  getFunction(
+    nameOrSignature: "withdrawFees"
+  ): TypedContractMethod<
+    [tokens: AddressLike[], amounts: BigNumberish[], to: AddressLike],
+    [void],
+    "nonpayable"
+  >;
+  getFunction(
+    nameOrSignature: "withdrawals"
+  ): TypedContractMethod<
+    [arg0: BigNumberish],
+    [
+      [
+        boolean,
+        boolean,
+        boolean,
+        bigint,
+        string,
+        bigint,
+        string,
+        bigint,
+        bigint
+      ] & {
+        paused: boolean;
+        pending: boolean;
+        executed: boolean;
+        amount: bigint;
+        token: string;
+        fee: bigint;
+        receiver: string;
+        timestamp: bigint;
+        withdrawType: bigint;
+      }
+    ],
+    "view"
+  >;
+
+  getEvent(
+    key: "Deposit"
+  ): TypedContractEvent<
+    DepositEvent.InputTuple,
+    DepositEvent.OutputTuple,
+    DepositEvent.OutputObject
+  >;
+  getEvent(
+    key: "FeesWithdrawn"
+  ): TypedContractEvent<
+    FeesWithdrawnEvent.InputTuple,
+    FeesWithdrawnEvent.OutputTuple,
+    FeesWithdrawnEvent.OutputObject
+  >;
+  getEvent(
+    key: "Initialized"
+  ): TypedContractEvent<
+    InitializedEvent.InputTuple,
+    InitializedEvent.OutputTuple,
+    InitializedEvent.OutputObject
+  >;
+  getEvent(
+    key: "Paused"
+  ): TypedContractEvent<
+    PausedEvent.InputTuple,
+    PausedEvent.OutputTuple,
+    PausedEvent.OutputObject
+  >;
+  getEvent(
+    key: "PendingWithdrawChallengePeriodUpdated"
+  ): TypedContractEvent<
+    PendingWithdrawChallengePeriodUpdatedEvent.InputTuple,
+    PendingWithdrawChallengePeriodUpdatedEvent.OutputTuple,
+    PendingWithdrawChallengePeriodUpdatedEvent.OutputObject
+  >;
+  getEvent(
+    key: "PendingWithdrawalToggled"
+  ): TypedContractEvent<
+    PendingWithdrawalToggledEvent.InputTuple,
+    PendingWithdrawalToggledEvent.OutputTuple,
+    PendingWithdrawalToggledEvent.OutputObject
+  >;
+  getEvent(
+    key: "RoleAdminChanged"
+  ): TypedContractEvent<
+    RoleAdminChangedEvent.InputTuple,
+    RoleAdminChangedEvent.OutputTuple,
+    RoleAdminChangedEvent.OutputObject
+  >;
+  getEvent(
+    key: "RoleGranted"
+  ): TypedContractEvent<
+    RoleGrantedEvent.InputTuple,
+    RoleGrantedEvent.OutputTuple,
+    RoleGrantedEvent.OutputObject
+  >;
+  getEvent(
+    key: "RoleRevoked"
+  ): TypedContractEvent<
+    RoleRevokedEvent.InputTuple,
+    RoleRevokedEvent.OutputTuple,
+    RoleRevokedEvent.OutputObject
+  >;
+  getEvent(
+    key: "TokenAdded"
+  ): TypedContractEvent<
+    TokenAddedEvent.InputTuple,
+    TokenAddedEvent.OutputTuple,
+    TokenAddedEvent.OutputObject
+  >;
+  getEvent(
+    key: "TokenRemoved"
+  ): TypedContractEvent<
+    TokenRemovedEvent.InputTuple,
+    TokenRemovedEvent.OutputTuple,
+    TokenRemovedEvent.OutputObject
+  >;
+  getEvent(
+    key: "TokenUpdated"
+  ): TypedContractEvent<
+    TokenUpdatedEvent.InputTuple,
+    TokenUpdatedEvent.OutputTuple,
+    TokenUpdatedEvent.OutputObject
+  >;
+  getEvent(
+    key: "Unpaused"
+  ): TypedContractEvent<
+    UnpausedEvent.InputTuple,
+    UnpausedEvent.OutputTuple,
+    UnpausedEvent.OutputObject
+  >;
+  getEvent(
+    key: "Upgraded"
+  ): TypedContractEvent<
+    UpgradedEvent.InputTuple,
+    UpgradedEvent.OutputTuple,
+    UpgradedEvent.OutputObject
+  >;
+  getEvent(
+    key: "ValidatorsAdded"
+  ): TypedContractEvent<
+    ValidatorsAddedEvent.InputTuple,
+    ValidatorsAddedEvent.OutputTuple,
+    ValidatorsAddedEvent.OutputObject
+  >;
+  getEvent(
+    key: "ValidatorsRemoved"
+  ): TypedContractEvent<
+    ValidatorsRemovedEvent.InputTuple,
+    ValidatorsRemovedEvent.OutputTuple,
+    ValidatorsRemovedEvent.OutputObject
+  >;
+  getEvent(
+    key: "WithdrawExecuted"
+  ): TypedContractEvent<
+    WithdrawExecutedEvent.InputTuple,
+    WithdrawExecutedEvent.OutputTuple,
+    WithdrawExecutedEvent.OutputObject
+  >;
+  getEvent(
+    key: "WithdrawHotAmountRefilled"
+  ): TypedContractEvent<
+    WithdrawHotAmountRefilledEvent.InputTuple,
+    WithdrawHotAmountRefilledEvent.OutputTuple,
+    WithdrawHotAmountRefilledEvent.OutputObject
+  >;
+  getEvent(
+    key: "WithdrawHotAmountUsed"
+  ): TypedContractEvent<
+    WithdrawHotAmountUsedEvent.InputTuple,
+    WithdrawHotAmountUsedEvent.OutputTuple,
+    WithdrawHotAmountUsedEvent.OutputObject
+  >;
+  getEvent(
+    key: "WithdrawalAdded"
+  ): TypedContractEvent<
+    WithdrawalAddedEvent.InputTuple,
+    WithdrawalAddedEvent.OutputTuple,
+    WithdrawalAddedEvent.OutputObject
+  >;
 
   filters: {
-    "Deposit(address,address,uint256)"(
-      account?: null,
-      token?: null,
-      amount?: null
-    ): DepositEventFilter;
-    Deposit(account?: null, token?: null, amount?: null): DepositEventFilter;
-
-    "FeesWithdrawn(address[],uint256[],address)"(
-      tokens?: null,
-      amounts?: null,
-      to?: null
-    ): FeesWithdrawnEventFilter;
-    FeesWithdrawn(
-      tokens?: null,
-      amounts?: null,
-      to?: null
-    ): FeesWithdrawnEventFilter;
-
-    "Initialized(uint64)"(version?: null): InitializedEventFilter;
-    Initialized(version?: null): InitializedEventFilter;
-
-    "Paused(address)"(account?: null): PausedEventFilter;
-    Paused(account?: null): PausedEventFilter;
-
-    "PendingWithdrawChallengePeriodUpdated(uint256,uint256)"(
-      oldValue?: null,
-      newValue?: null
-    ): PendingWithdrawChallengePeriodUpdatedEventFilter;
-    PendingWithdrawChallengePeriodUpdated(
-      oldValue?: null,
-      newValue?: null
-    ): PendingWithdrawChallengePeriodUpdatedEventFilter;
-
-    "PendingWithdrawalToggled(uint256,bool)"(
-      id?: null,
-      paused?: null
-    ): PendingWithdrawalToggledEventFilter;
-    PendingWithdrawalToggled(
-      id?: null,
-      paused?: null
-    ): PendingWithdrawalToggledEventFilter;
-
-    "RoleAdminChanged(bytes32,bytes32,bytes32)"(
-      role?: PromiseOrValue<BytesLike> | null,
-      previousAdminRole?: PromiseOrValue<BytesLike> | null,
-      newAdminRole?: PromiseOrValue<BytesLike> | null
-    ): RoleAdminChangedEventFilter;
-    RoleAdminChanged(
-      role?: PromiseOrValue<BytesLike> | null,
-      previousAdminRole?: PromiseOrValue<BytesLike> | null,
-      newAdminRole?: PromiseOrValue<BytesLike> | null
-    ): RoleAdminChangedEventFilter;
-
-    "RoleGranted(bytes32,address,address)"(
-      role?: PromiseOrValue<BytesLike> | null,
-      account?: PromiseOrValue<string> | null,
-      sender?: PromiseOrValue<string> | null
-    ): RoleGrantedEventFilter;
-    RoleGranted(
-      role?: PromiseOrValue<BytesLike> | null,
-      account?: PromiseOrValue<string> | null,
-      sender?: PromiseOrValue<string> | null
-    ): RoleGrantedEventFilter;
-
-    "RoleRevoked(bytes32,address,address)"(
-      role?: PromiseOrValue<BytesLike> | null,
-      account?: PromiseOrValue<string> | null,
-      sender?: PromiseOrValue<string> | null
-    ): RoleRevokedEventFilter;
-    RoleRevoked(
-      role?: PromiseOrValue<BytesLike> | null,
-      account?: PromiseOrValue<string> | null,
-      sender?: PromiseOrValue<string> | null
-    ): RoleRevokedEventFilter;
-
-    "TokenAdded(address,uint256,uint256)"(
-      token?: null,
-      hardCapRatioBps?: null,
-      refillRateMps?: null
-    ): TokenAddedEventFilter;
-    TokenAdded(
-      token?: null,
-      hardCapRatioBps?: null,
-      refillRateMps?: null
-    ): TokenAddedEventFilter;
-
-    "TokenRemoved(address)"(token?: null): TokenRemovedEventFilter;
-    TokenRemoved(token?: null): TokenRemovedEventFilter;
-
-    "TokenUpdated(address,uint256,uint256)"(
-      token?: null,
-      hardCapRatioBps?: null,
-      refillRateMps?: null
-    ): TokenUpdatedEventFilter;
-    TokenUpdated(
-      token?: null,
-      hardCapRatioBps?: null,
-      refillRateMps?: null
-    ): TokenUpdatedEventFilter;
-
-    "Unpaused(address)"(account?: null): UnpausedEventFilter;
-    Unpaused(account?: null): UnpausedEventFilter;
-
-    "Upgraded(address)"(
-      implementation?: PromiseOrValue<string> | null
-    ): UpgradedEventFilter;
-    Upgraded(
-      implementation?: PromiseOrValue<string> | null
-    ): UpgradedEventFilter;
-
-    "ValidatorsAdded(bytes32,uint256,uint256)"(
-      hash?: null,
-      count?: null,
-      totalPower?: null
-    ): ValidatorsAddedEventFilter;
-    ValidatorsAdded(
-      hash?: null,
-      count?: null,
-      totalPower?: null
-    ): ValidatorsAddedEventFilter;
-
-    "ValidatorsRemoved(bytes32,uint256)"(
-      hash?: null,
-      count?: null
-    ): ValidatorsRemovedEventFilter;
-    ValidatorsRemoved(hash?: null, count?: null): ValidatorsRemovedEventFilter;
-
-    "WithdrawExecuted(uint256,address,address,uint256,uint256,bool,bool,bool,uint8)"(
-      id?: null,
-      to?: null,
-      token?: null,
-      amount?: null,
-      fee?: null,
-      isPending?: null,
-      isFlushed?: null,
-      isPaused?: null,
-      withdrawType?: null
-    ): WithdrawExecutedEventFilter;
-    WithdrawExecuted(
-      id?: null,
-      to?: null,
-      token?: null,
-      amount?: null,
-      fee?: null,
-      isPending?: null,
-      isFlushed?: null,
-      isPaused?: null,
-      withdrawType?: null
-    ): WithdrawExecutedEventFilter;
-
-    "WithdrawHotAmountRefilled(address,uint256,uint256)"(
-      token?: null,
-      refillAmount?: null,
-      usedWithdrawHotAmount?: null
-    ): WithdrawHotAmountRefilledEventFilter;
-    WithdrawHotAmountRefilled(
-      token?: null,
-      refillAmount?: null,
-      usedWithdrawHotAmount?: null
-    ): WithdrawHotAmountRefilledEventFilter;
-
-    "WithdrawHotAmountUsed(address,uint256,uint256,bool)"(
-      token?: null,
-      amount?: null,
-      updateUsedWithdrawHotAmount?: null,
-      forcePending?: null
-    ): WithdrawHotAmountUsedEventFilter;
-    WithdrawHotAmountUsed(
-      token?: null,
-      amount?: null,
-      updateUsedWithdrawHotAmount?: null,
-      forcePending?: null
-    ): WithdrawHotAmountUsedEventFilter;
-
-    "WithdrawalAdded(uint256,address,uint256,uint256,address,uint8,bool)"(
-      id?: null,
-      token?: null,
-      amount?: null,
-      fee?: null,
-      receiver?: null,
-      withdrawType?: null,
-      isPending?: null
-    ): WithdrawalAddedEventFilter;
-    WithdrawalAdded(
-      id?: null,
-      token?: null,
-      amount?: null,
-      fee?: null,
-      receiver?: null,
-      withdrawType?: null,
-      isPending?: null
-    ): WithdrawalAddedEventFilter;
-  };
-
-  estimateGas: {
-    ADMIN_ROLE(overrides?: CallOverrides): Promise<BigNumber>;
-
-    DEFAULT_ADMIN_ROLE(overrides?: CallOverrides): Promise<BigNumber>;
-
-    OPERATOR_ROLE(overrides?: CallOverrides): Promise<BigNumber>;
-
-    PAUSE_ROLE(overrides?: CallOverrides): Promise<BigNumber>;
-
-    TOKEN_ROLE(overrides?: CallOverrides): Promise<BigNumber>;
-
-    UPGRADE_INTERFACE_VERSION(overrides?: CallOverrides): Promise<BigNumber>;
-
-    UPGRADE_ROLE(overrides?: CallOverrides): Promise<BigNumber>;
-
-    addToken(
-      token: PromiseOrValue<string>,
-      hardCapRatioBps: PromiseOrValue<BigNumberish>,
-      refillRateMps: PromiseOrValue<BigNumberish>,
-      overrides?: Overrides & { from?: PromiseOrValue<string> }
-    ): Promise<BigNumber>;
-
-    addValidators(
-      validators: ValidatorInfoStruct[],
-      overrides?: Overrides & { from?: PromiseOrValue<string> }
-    ): Promise<BigNumber>;
-
-    availableValidators(
-      arg0: PromiseOrValue<BytesLike>,
-      overrides?: CallOverrides
-    ): Promise<BigNumber>;
-
-    deposit(
-      token: PromiseOrValue<string>,
-      amount: PromiseOrValue<BigNumberish>,
-      overrides?: PayableOverrides & { from?: PromiseOrValue<string> }
-    ): Promise<BigNumber>;
-
-    executeWithdrawal(
-      id: PromiseOrValue<BigNumberish>,
-      overrides?: Overrides & { from?: PromiseOrValue<string> }
-    ): Promise<BigNumber>;
-
-    fees(
-      arg0: PromiseOrValue<string>,
-      overrides?: CallOverrides
-    ): Promise<BigNumber>;
-
-    getRoleAdmin(
-      role: PromiseOrValue<BytesLike>,
-      overrides?: CallOverrides
-    ): Promise<BigNumber>;
-
-    grantRole(
-      role: PromiseOrValue<BytesLike>,
-      account: PromiseOrValue<string>,
-      overrides?: Overrides & { from?: PromiseOrValue<string> }
-    ): Promise<BigNumber>;
-
-    hasRole(
-      role: PromiseOrValue<BytesLike>,
-      account: PromiseOrValue<string>,
-      overrides?: CallOverrides
-    ): Promise<BigNumber>;
-
-    initialize(
-      _pendingWithdrawChallengePeriod: PromiseOrValue<BigNumberish>,
-      overrides?: Overrides & { from?: PromiseOrValue<string> }
-    ): Promise<BigNumber>;
-
-    pause(
-      overrides?: Overrides & { from?: PromiseOrValue<string> }
-    ): Promise<BigNumber>;
-
-    paused(overrides?: CallOverrides): Promise<BigNumber>;
-
-    pendingWithdrawChallengePeriod(
-      overrides?: CallOverrides
-    ): Promise<BigNumber>;
-
-    pendingWithdrawalIds(
-      arg0: PromiseOrValue<BigNumberish>,
-      overrides?: CallOverrides
-    ): Promise<BigNumber>;
-
-    proxiableUUID(overrides?: CallOverrides): Promise<BigNumber>;
-
-    removeToken(
-      token: PromiseOrValue<string>,
-      overrides?: Overrides & { from?: PromiseOrValue<string> }
-    ): Promise<BigNumber>;
-
-    removeValidators(
-      validators: ValidatorInfoStruct[],
-      overrides?: Overrides & { from?: PromiseOrValue<string> }
-    ): Promise<BigNumber>;
-
-    renounceRole(
-      role: PromiseOrValue<BytesLike>,
-      callerConfirmation: PromiseOrValue<string>,
-      overrides?: Overrides & { from?: PromiseOrValue<string> }
-    ): Promise<BigNumber>;
-
-    revokeRole(
-      role: PromiseOrValue<BytesLike>,
-      account: PromiseOrValue<string>,
-      overrides?: Overrides & { from?: PromiseOrValue<string> }
-    ): Promise<BigNumber>;
-
-    supportedTokens(
-      arg0: PromiseOrValue<string>,
-      overrides?: CallOverrides
-    ): Promise<BigNumber>;
-
-    supportsInterface(
-      interfaceId: PromiseOrValue<BytesLike>,
-      overrides?: CallOverrides
-    ): Promise<BigNumber>;
-
-    unpause(
-      overrides?: Overrides & { from?: PromiseOrValue<string> }
-    ): Promise<BigNumber>;
-
-    updatePendingWithdrawChallengePeriod(
-      newValue: PromiseOrValue<BigNumberish>,
-      overrides?: Overrides & { from?: PromiseOrValue<string> }
-    ): Promise<BigNumber>;
-
-    updateToken(
-      token: PromiseOrValue<string>,
-      hardCapRatioBps: PromiseOrValue<BigNumberish>,
-      refillRateMps: PromiseOrValue<BigNumberish>,
-      overrides?: Overrides & { from?: PromiseOrValue<string> }
-    ): Promise<BigNumber>;
-
-    upgradeToAndCall(
-      newImplementation: PromiseOrValue<string>,
-      data: PromiseOrValue<BytesLike>,
-      overrides?: PayableOverrides & { from?: PromiseOrValue<string> }
-    ): Promise<BigNumber>;
-
-    withdraw(
-      id: PromiseOrValue<BigNumberish>,
-      validators: ValidatorInfoStruct[],
-      action: WithdrawActionStruct,
-      validatorSignatures: PromiseOrValue<BytesLike>[],
-      overrides?: PayableOverrides & { from?: PromiseOrValue<string> }
-    ): Promise<BigNumber>;
-
-    withdrawFees(
-      tokens: PromiseOrValue<string>[],
-      amounts: PromiseOrValue<BigNumberish>[],
-      to: PromiseOrValue<string>,
-      overrides?: Overrides & { from?: PromiseOrValue<string> }
-    ): Promise<BigNumber>;
-
-    withdrawals(
-      arg0: PromiseOrValue<BigNumberish>,
-      overrides?: CallOverrides
-    ): Promise<BigNumber>;
-  };
-
-  populateTransaction: {
-    ADMIN_ROLE(overrides?: CallOverrides): Promise<PopulatedTransaction>;
-
-    DEFAULT_ADMIN_ROLE(
-      overrides?: CallOverrides
-    ): Promise<PopulatedTransaction>;
-
-    OPERATOR_ROLE(overrides?: CallOverrides): Promise<PopulatedTransaction>;
-
-    PAUSE_ROLE(overrides?: CallOverrides): Promise<PopulatedTransaction>;
-
-    TOKEN_ROLE(overrides?: CallOverrides): Promise<PopulatedTransaction>;
-
-    UPGRADE_INTERFACE_VERSION(
-      overrides?: CallOverrides
-    ): Promise<PopulatedTransaction>;
-
-    UPGRADE_ROLE(overrides?: CallOverrides): Promise<PopulatedTransaction>;
-
-    addToken(
-      token: PromiseOrValue<string>,
-      hardCapRatioBps: PromiseOrValue<BigNumberish>,
-      refillRateMps: PromiseOrValue<BigNumberish>,
-      overrides?: Overrides & { from?: PromiseOrValue<string> }
-    ): Promise<PopulatedTransaction>;
-
-    addValidators(
-      validators: ValidatorInfoStruct[],
-      overrides?: Overrides & { from?: PromiseOrValue<string> }
-    ): Promise<PopulatedTransaction>;
-
-    availableValidators(
-      arg0: PromiseOrValue<BytesLike>,
-      overrides?: CallOverrides
-    ): Promise<PopulatedTransaction>;
-
-    deposit(
-      token: PromiseOrValue<string>,
-      amount: PromiseOrValue<BigNumberish>,
-      overrides?: PayableOverrides & { from?: PromiseOrValue<string> }
-    ): Promise<PopulatedTransaction>;
-
-    executeWithdrawal(
-      id: PromiseOrValue<BigNumberish>,
-      overrides?: Overrides & { from?: PromiseOrValue<string> }
-    ): Promise<PopulatedTransaction>;
-
-    fees(
-      arg0: PromiseOrValue<string>,
-      overrides?: CallOverrides
-    ): Promise<PopulatedTransaction>;
-
-    getRoleAdmin(
-      role: PromiseOrValue<BytesLike>,
-      overrides?: CallOverrides
-    ): Promise<PopulatedTransaction>;
-
-    grantRole(
-      role: PromiseOrValue<BytesLike>,
-      account: PromiseOrValue<string>,
-      overrides?: Overrides & { from?: PromiseOrValue<string> }
-    ): Promise<PopulatedTransaction>;
-
-    hasRole(
-      role: PromiseOrValue<BytesLike>,
-      account: PromiseOrValue<string>,
-      overrides?: CallOverrides
-    ): Promise<PopulatedTransaction>;
-
-    initialize(
-      _pendingWithdrawChallengePeriod: PromiseOrValue<BigNumberish>,
-      overrides?: Overrides & { from?: PromiseOrValue<string> }
-    ): Promise<PopulatedTransaction>;
-
-    pause(
-      overrides?: Overrides & { from?: PromiseOrValue<string> }
-    ): Promise<PopulatedTransaction>;
-
-    paused(overrides?: CallOverrides): Promise<PopulatedTransaction>;
-
-    pendingWithdrawChallengePeriod(
-      overrides?: CallOverrides
-    ): Promise<PopulatedTransaction>;
-
-    pendingWithdrawalIds(
-      arg0: PromiseOrValue<BigNumberish>,
-      overrides?: CallOverrides
-    ): Promise<PopulatedTransaction>;
-
-    proxiableUUID(overrides?: CallOverrides): Promise<PopulatedTransaction>;
-
-    removeToken(
-      token: PromiseOrValue<string>,
-      overrides?: Overrides & { from?: PromiseOrValue<string> }
-    ): Promise<PopulatedTransaction>;
-
-    removeValidators(
-      validators: ValidatorInfoStruct[],
-      overrides?: Overrides & { from?: PromiseOrValue<string> }
-    ): Promise<PopulatedTransaction>;
-
-    renounceRole(
-      role: PromiseOrValue<BytesLike>,
-      callerConfirmation: PromiseOrValue<string>,
-      overrides?: Overrides & { from?: PromiseOrValue<string> }
-    ): Promise<PopulatedTransaction>;
-
-    revokeRole(
-      role: PromiseOrValue<BytesLike>,
-      account: PromiseOrValue<string>,
-      overrides?: Overrides & { from?: PromiseOrValue<string> }
-    ): Promise<PopulatedTransaction>;
-
-    supportedTokens(
-      arg0: PromiseOrValue<string>,
-      overrides?: CallOverrides
-    ): Promise<PopulatedTransaction>;
-
-    supportsInterface(
-      interfaceId: PromiseOrValue<BytesLike>,
-      overrides?: CallOverrides
-    ): Promise<PopulatedTransaction>;
-
-    unpause(
-      overrides?: Overrides & { from?: PromiseOrValue<string> }
-    ): Promise<PopulatedTransaction>;
-
-    updatePendingWithdrawChallengePeriod(
-      newValue: PromiseOrValue<BigNumberish>,
-      overrides?: Overrides & { from?: PromiseOrValue<string> }
-    ): Promise<PopulatedTransaction>;
-
-    updateToken(
-      token: PromiseOrValue<string>,
-      hardCapRatioBps: PromiseOrValue<BigNumberish>,
-      refillRateMps: PromiseOrValue<BigNumberish>,
-      overrides?: Overrides & { from?: PromiseOrValue<string> }
-    ): Promise<PopulatedTransaction>;
-
-    upgradeToAndCall(
-      newImplementation: PromiseOrValue<string>,
-      data: PromiseOrValue<BytesLike>,
-      overrides?: PayableOverrides & { from?: PromiseOrValue<string> }
-    ): Promise<PopulatedTransaction>;
-
-    withdraw(
-      id: PromiseOrValue<BigNumberish>,
-      validators: ValidatorInfoStruct[],
-      action: WithdrawActionStruct,
-      validatorSignatures: PromiseOrValue<BytesLike>[],
-      overrides?: PayableOverrides & { from?: PromiseOrValue<string> }
-    ): Promise<PopulatedTransaction>;
-
-    withdrawFees(
-      tokens: PromiseOrValue<string>[],
-      amounts: PromiseOrValue<BigNumberish>[],
-      to: PromiseOrValue<string>,
-      overrides?: Overrides & { from?: PromiseOrValue<string> }
-    ): Promise<PopulatedTransaction>;
-
-    withdrawals(
-      arg0: PromiseOrValue<BigNumberish>,
-      overrides?: CallOverrides
-    ): Promise<PopulatedTransaction>;
+    "Deposit(address,address,uint256)": TypedContractEvent<
+      DepositEvent.InputTuple,
+      DepositEvent.OutputTuple,
+      DepositEvent.OutputObject
+    >;
+    Deposit: TypedContractEvent<
+      DepositEvent.InputTuple,
+      DepositEvent.OutputTuple,
+      DepositEvent.OutputObject
+    >;
+
+    "FeesWithdrawn(address[],uint256[],address)": TypedContractEvent<
+      FeesWithdrawnEvent.InputTuple,
+      FeesWithdrawnEvent.OutputTuple,
+      FeesWithdrawnEvent.OutputObject
+    >;
+    FeesWithdrawn: TypedContractEvent<
+      FeesWithdrawnEvent.InputTuple,
+      FeesWithdrawnEvent.OutputTuple,
+      FeesWithdrawnEvent.OutputObject
+    >;
+
+    "Initialized(uint64)": TypedContractEvent<
+      InitializedEvent.InputTuple,
+      InitializedEvent.OutputTuple,
+      InitializedEvent.OutputObject
+    >;
+    Initialized: TypedContractEvent<
+      InitializedEvent.InputTuple,
+      InitializedEvent.OutputTuple,
+      InitializedEvent.OutputObject
+    >;
+
+    "Paused(address)": TypedContractEvent<
+      PausedEvent.InputTuple,
+      PausedEvent.OutputTuple,
+      PausedEvent.OutputObject
+    >;
+    Paused: TypedContractEvent<
+      PausedEvent.InputTuple,
+      PausedEvent.OutputTuple,
+      PausedEvent.OutputObject
+    >;
+
+    "PendingWithdrawChallengePeriodUpdated(uint256,uint256)": TypedContractEvent<
+      PendingWithdrawChallengePeriodUpdatedEvent.InputTuple,
+      PendingWithdrawChallengePeriodUpdatedEvent.OutputTuple,
+      PendingWithdrawChallengePeriodUpdatedEvent.OutputObject
+    >;
+    PendingWithdrawChallengePeriodUpdated: TypedContractEvent<
+      PendingWithdrawChallengePeriodUpdatedEvent.InputTuple,
+      PendingWithdrawChallengePeriodUpdatedEvent.OutputTuple,
+      PendingWithdrawChallengePeriodUpdatedEvent.OutputObject
+    >;
+
+    "PendingWithdrawalToggled(uint256,bool)": TypedContractEvent<
+      PendingWithdrawalToggledEvent.InputTuple,
+      PendingWithdrawalToggledEvent.OutputTuple,
+      PendingWithdrawalToggledEvent.OutputObject
+    >;
+    PendingWithdrawalToggled: TypedContractEvent<
+      PendingWithdrawalToggledEvent.InputTuple,
+      PendingWithdrawalToggledEvent.OutputTuple,
+      PendingWithdrawalToggledEvent.OutputObject
+    >;
+
+    "RoleAdminChanged(bytes32,bytes32,bytes32)": TypedContractEvent<
+      RoleAdminChangedEvent.InputTuple,
+      RoleAdminChangedEvent.OutputTuple,
+      RoleAdminChangedEvent.OutputObject
+    >;
+    RoleAdminChanged: TypedContractEvent<
+      RoleAdminChangedEvent.InputTuple,
+      RoleAdminChangedEvent.OutputTuple,
+      RoleAdminChangedEvent.OutputObject
+    >;
+
+    "RoleGranted(bytes32,address,address)": TypedContractEvent<
+      RoleGrantedEvent.InputTuple,
+      RoleGrantedEvent.OutputTuple,
+      RoleGrantedEvent.OutputObject
+    >;
+    RoleGranted: TypedContractEvent<
+      RoleGrantedEvent.InputTuple,
+      RoleGrantedEvent.OutputTuple,
+      RoleGrantedEvent.OutputObject
+    >;
+
+    "RoleRevoked(bytes32,address,address)": TypedContractEvent<
+      RoleRevokedEvent.InputTuple,
+      RoleRevokedEvent.OutputTuple,
+      RoleRevokedEvent.OutputObject
+    >;
+    RoleRevoked: TypedContractEvent<
+      RoleRevokedEvent.InputTuple,
+      RoleRevokedEvent.OutputTuple,
+      RoleRevokedEvent.OutputObject
+    >;
+
+    "TokenAdded(address,uint256,uint256)": TypedContractEvent<
+      TokenAddedEvent.InputTuple,
+      TokenAddedEvent.OutputTuple,
+      TokenAddedEvent.OutputObject
+    >;
+    TokenAdded: TypedContractEvent<
+      TokenAddedEvent.InputTuple,
+      TokenAddedEvent.OutputTuple,
+      TokenAddedEvent.OutputObject
+    >;
+
+    "TokenRemoved(address)": TypedContractEvent<
+      TokenRemovedEvent.InputTuple,
+      TokenRemovedEvent.OutputTuple,
+      TokenRemovedEvent.OutputObject
+    >;
+    TokenRemoved: TypedContractEvent<
+      TokenRemovedEvent.InputTuple,
+      TokenRemovedEvent.OutputTuple,
+      TokenRemovedEvent.OutputObject
+    >;
+
+    "TokenUpdated(address,uint256,uint256)": TypedContractEvent<
+      TokenUpdatedEvent.InputTuple,
+      TokenUpdatedEvent.OutputTuple,
+      TokenUpdatedEvent.OutputObject
+    >;
+    TokenUpdated: TypedContractEvent<
+      TokenUpdatedEvent.InputTuple,
+      TokenUpdatedEvent.OutputTuple,
+      TokenUpdatedEvent.OutputObject
+    >;
+
+    "Unpaused(address)": TypedContractEvent<
+      UnpausedEvent.InputTuple,
+      UnpausedEvent.OutputTuple,
+      UnpausedEvent.OutputObject
+    >;
+    Unpaused: TypedContractEvent<
+      UnpausedEvent.InputTuple,
+      UnpausedEvent.OutputTuple,
+      UnpausedEvent.OutputObject
+    >;
+
+    "Upgraded(address)": TypedContractEvent<
+      UpgradedEvent.InputTuple,
+      UpgradedEvent.OutputTuple,
+      UpgradedEvent.OutputObject
+    >;
+    Upgraded: TypedContractEvent<
+      UpgradedEvent.InputTuple,
+      UpgradedEvent.OutputTuple,
+      UpgradedEvent.OutputObject
+    >;
+
+    "ValidatorsAdded(bytes32,uint256,uint256)": TypedContractEvent<
+      ValidatorsAddedEvent.InputTuple,
+      ValidatorsAddedEvent.OutputTuple,
+      ValidatorsAddedEvent.OutputObject
+    >;
+    ValidatorsAdded: TypedContractEvent<
+      ValidatorsAddedEvent.InputTuple,
+      ValidatorsAddedEvent.OutputTuple,
+      ValidatorsAddedEvent.OutputObject
+    >;
+
+    "ValidatorsRemoved(bytes32,uint256)": TypedContractEvent<
+      ValidatorsRemovedEvent.InputTuple,
+      ValidatorsRemovedEvent.OutputTuple,
+      ValidatorsRemovedEvent.OutputObject
+    >;
+    ValidatorsRemoved: TypedContractEvent<
+      ValidatorsRemovedEvent.InputTuple,
+      ValidatorsRemovedEvent.OutputTuple,
+      ValidatorsRemovedEvent.OutputObject
+    >;
+
+    "WithdrawExecuted(uint256,address,address,uint256,uint256,bool,bool,bool,uint8)": TypedContractEvent<
+      WithdrawExecutedEvent.InputTuple,
+      WithdrawExecutedEvent.OutputTuple,
+      WithdrawExecutedEvent.OutputObject
+    >;
+    WithdrawExecuted: TypedContractEvent<
+      WithdrawExecutedEvent.InputTuple,
+      WithdrawExecutedEvent.OutputTuple,
+      WithdrawExecutedEvent.OutputObject
+    >;
+
+    "WithdrawHotAmountRefilled(address,uint256,uint256)": TypedContractEvent<
+      WithdrawHotAmountRefilledEvent.InputTuple,
+      WithdrawHotAmountRefilledEvent.OutputTuple,
+      WithdrawHotAmountRefilledEvent.OutputObject
+    >;
+    WithdrawHotAmountRefilled: TypedContractEvent<
+      WithdrawHotAmountRefilledEvent.InputTuple,
+      WithdrawHotAmountRefilledEvent.OutputTuple,
+      WithdrawHotAmountRefilledEvent.OutputObject
+    >;
+
+    "WithdrawHotAmountUsed(address,uint256,uint256,bool)": TypedContractEvent<
+      WithdrawHotAmountUsedEvent.InputTuple,
+      WithdrawHotAmountUsedEvent.OutputTuple,
+      WithdrawHotAmountUsedEvent.OutputObject
+    >;
+    WithdrawHotAmountUsed: TypedContractEvent<
+      WithdrawHotAmountUsedEvent.InputTuple,
+      WithdrawHotAmountUsedEvent.OutputTuple,
+      WithdrawHotAmountUsedEvent.OutputObject
+    >;
+
+    "WithdrawalAdded(uint256,address,uint256,uint256,address,uint8,bool)": TypedContractEvent<
+      WithdrawalAddedEvent.InputTuple,
+      WithdrawalAddedEvent.OutputTuple,
+      WithdrawalAddedEvent.OutputObject
+    >;
+    WithdrawalAdded: TypedContractEvent<
+      WithdrawalAddedEvent.InputTuple,
+      WithdrawalAddedEvent.OutputTuple,
+      WithdrawalAddedEvent.OutputObject
+    >;
   };
 }
