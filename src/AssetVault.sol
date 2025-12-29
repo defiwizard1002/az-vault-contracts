@@ -41,20 +41,11 @@ struct ValidatorInfo {
     uint256 power;
 }
 
-enum WithdrawType {
-    NORMAL,
-    FORCE_PENDING,
-    PAUSE_WITHDRAW,
-    UNPAUSE_WITHDRAW,
-    FLUSH
-}
-
 struct WithdrawAction {
     address token;
     uint256 amount;
     uint256 fee;
     address receiver;
-    WithdrawType withdrawType;
 }
 
 struct Withdrawal {
@@ -66,7 +57,6 @@ struct Withdrawal {
     uint256 fee;
     address receiver;
     uint256 timestamp;
-    WithdrawType withdrawType;
 }
 
 contract AssetVault is
@@ -75,6 +65,29 @@ contract AssetVault is
     UUPSUpgradeable,
     ReentrancyGuard
 {
+    error ValidatorsAlreadySet();
+    error ValidatorsNotOrdered();
+    error ValidatorsNotSet();
+    error TokensAndAmountsLengthMismatch();
+    error TokenAlreadyExists();
+    error ZeroAmount();
+    error ValueMismatch();
+    error ValueNotZero();
+    error AmountMismatch();
+    error EmptyIds();
+    error ChallengePeriodNotExpired();
+    error ChallengePeriodExpired();
+    error WithdrawAlreadyInDesiredState();
+    error WithdrawalPaused();
+    error WithdrawalMustBePending();
+    error EmptyTokens();
+    error InvalidParameters();
+    error InvalidValidators();
+    error NotEnoughValidatorPower();
+    error TokenNotSupported();
+    error WithdrawalExistenceCheckFailed();
+    error WithdrawalAlreadyExecuted();
+
     bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
     bytes32 public constant TOKEN_ROLE = keccak256("TOKEN_ROLE");
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
@@ -125,8 +138,8 @@ contract AssetVault is
         uint256 amount,
         uint256 fee,
         address receiver,
-        WithdrawType withdrawType,
-        bool isPending
+        bool isPending,
+        bool isForcePending
     );
 
     event WithdrawExecuted(
@@ -140,9 +153,7 @@ contract AssetVault is
         // Whether the withdrawal is flushed
         bool isFlushed,
         // Whether the withdrawal is paused when executed
-        bool isPaused,
-        // Will only be NORMAL or FORCE_PENDING, the types when withdrawal is added
-        WithdrawType withdrawType
+        bool isPaused
     );
     event PendingWithdrawalToggled(uint256 id, bool paused);
 
@@ -193,17 +204,15 @@ contract AssetVault is
         ValidatorInfo[] calldata validators
     ) external onlyRole(ADMIN_ROLE) {
         bytes32 validatorHash = keccak256(abi.encode(validators));
-        require(
-            availableValidators[validatorHash] == 0,
-            "validators already set"
-        );
+        if (availableValidators[validatorHash] != 0) {
+            revert ValidatorsAlreadySet();
+        }
         uint256 totalPower = 0;
         address lastValidator = address(0);
         for (uint256 i = 0; i < validators.length; i++) {
-            require(
-                validators[i].signer > lastValidator,
-                "validators not ordered"
-            );
+            if (validators[i].signer <= lastValidator) {
+                revert ValidatorsNotOrdered();
+            }
             totalPower += validators[i].power;
             lastValidator = validators[i].signer;
         }
@@ -215,7 +224,9 @@ contract AssetVault is
         ValidatorInfo[] calldata validators
     ) external onlyRole(ADMIN_ROLE) {
         bytes32 validatorHash = keccak256(abi.encode(validators));
-        require(availableValidators[validatorHash] != 0, "validators not set");
+        if (availableValidators[validatorHash] == 0) {
+            revert ValidatorsNotSet();
+        }
         delete availableValidators[validatorHash];
         emit ValidatorsRemoved(validatorHash, validators.length);
     }
@@ -224,11 +235,10 @@ contract AssetVault is
         address[] calldata tokens,
         uint256[] calldata amounts,
         address to
-    ) external onlyRole(ADMIN_ROLE) {
-        require(
-            tokens.length == amounts.length,
-            "tokens and amounts length mismatch"
-        );
+    ) external whenNotPaused onlyRole(ADMIN_ROLE) nonReentrant {
+        if (tokens.length != amounts.length) {
+            revert TokensAndAmountsLengthMismatch();
+        }
         for (uint256 i = 0; i < tokens.length; i++) {
             address token = tokens[i];
             uint256 fee = fees[token];
@@ -248,7 +258,9 @@ contract AssetVault is
         uint256 refillRateMps
     ) external onlyRole(TOKEN_ROLE) {
         TokenInfo storage tokenInfo = supportedTokens[token];
-        require(tokenInfo.hardCapRatioBps == 0, "token already exists");
+        if (tokenInfo.hardCapRatioBps != 0) {
+            revert TokenAlreadyExists();
+        }
         _validateToken(hardCapRatioBps, refillRateMps);
         tokenInfo.token = token;
         tokenInfo.hardCapRatioBps = hardCapRatioBps;
@@ -256,9 +268,7 @@ contract AssetVault is
         emit TokenAdded(token, hardCapRatioBps, refillRateMps);
     }
 
-    function removeToken(
-        address token
-    ) external onlyRole(ADMIN_ROLE) {
+    function removeToken(address token) external onlyRole(ADMIN_ROLE) {
         _ensureTokenSupported(token);
         delete supportedTokens[token];
         emit TokenRemoved(token);
@@ -281,11 +291,17 @@ contract AssetVault is
         uint256 amount
     ) external payable whenNotPaused nonReentrant {
         _ensureTokenSupported(token);
-        require(amount > 0, "zero amount");
+        if (amount == 0) {
+            revert ZeroAmount();
+        }
         if (token == address(0)) {
-            require(amount == msg.value, "value mismatch");
+            if (amount != msg.value) {
+                revert ValueMismatch();
+            }
         } else {
-            require(msg.value == 0, "value not zero");
+            if (msg.value != 0) {
+                revert ValueNotZero();
+            }
             uint256 balanceBefore = IERC20(token).balanceOf(address(this));
             SafeERC20.safeTransferFrom(
                 IERC20(token),
@@ -294,30 +310,28 @@ contract AssetVault is
                 amount
             );
             uint256 balanceAfter = IERC20(token).balanceOf(address(this));
-            require(amount == balanceAfter - balanceBefore, "amount mismatch");
+            if (amount != balanceAfter - balanceBefore) {
+                revert AmountMismatch();
+            }
         }
 
         emit Deposit(msg.sender, token, amount);
     }
 
-    function withdraw(
+    function requestWithdraw(
         uint256 id,
+        bool isForcePending,
         ValidatorInfo[] calldata validators,
         WithdrawAction calldata action,
         bytes[] calldata validatorSignatures
-    )
-        external
-        payable
-        whenNotPaused
-        onlyRole(OPERATOR_ROLE)
-        nonReentrant
-    {
+    ) external payable whenNotPaused onlyRole(OPERATOR_ROLE) nonReentrant {
         _ensureTokenSupported(action.token);
         _refillWithdrawHotAmount(action.token);
+        _checkWithdrawalExists(id, false);
 
         bytes32 digest = keccak256(
             abi.encode(
-                "withdraw",
+                "requestWithdraw",
                 id,
                 block.chainid,
                 address(this),
@@ -325,92 +339,125 @@ contract AssetVault is
                 action.amount,
                 action.fee,
                 action.receiver,
-                action.withdrawType
+                isForcePending
             )
         );
 
         _verifyValidatorSignature(validators, digest, validatorSignatures);
 
-        if (action.withdrawType == WithdrawType.PAUSE_WITHDRAW) {
-            _togglePendingWithdrawal(id, true);
-        } else if (action.withdrawType == WithdrawType.UNPAUSE_WITHDRAW) {
-            _togglePendingWithdrawal(id, false);
-        } else if (action.withdrawType == WithdrawType.FLUSH) {
-            _flushWithdrawal(id);
-        } else if (action.withdrawType == WithdrawType.NORMAL) {
+        bool isPending = isForcePending;
+        if (!isForcePending) {
             // when normal withdrawal triggers hard cap exceeded, fallback to pending mode
-            bool shouldPending = _increaseUsedWithdrawHotAmount(
+            isPending = _increaseUsedWithdrawHotAmount(
                 supportedTokens[action.token],
                 action.amount
             );
-            _addWithdrawal(
-                id,
-                action.token,
-                action.amount,
-                action.fee,
-                action.receiver,
-                action.withdrawType,
-                shouldPending
-            );
-            if (!shouldPending) {
-                // directly execute the withdrawal
-                executeWithdrawal(id);
-            }
-        } else if (action.withdrawType == WithdrawType.FORCE_PENDING) {
-            _addWithdrawal(
-                id,
-                action.token,
-                action.amount,
-                action.fee,
-                action.receiver,
-                action.withdrawType,
-                true
-            );
         }
-    }
-
-    function executeWithdrawal(uint256 id) public onlyRole(OPERATOR_ROLE) {
-        _checkWithdrawalExists(id, true);
-        Withdrawal storage withdrawal = withdrawals[id];
-        _checkWithdrawalNotExecuted(id);
-        require(!withdrawal.paused, "withdrawal paused");
-        // pending withdrawal can only be executed if challenge period is expired
-        if (withdrawal.pending) {
-            require(
-                block.timestamp >=
-                    withdrawal.timestamp + pendingWithdrawChallengePeriod,
-                "challenge period not expired"
-            );
-        }
-        _transfer(
-            payable(withdrawal.receiver),
-            withdrawal.token,
-            withdrawal.amount,
-            withdrawal.fee
-        );
-        withdrawal.executed = true;
-        emit WithdrawExecuted(
-            id,
-            withdrawal.receiver,
-            withdrawal.token,
-            withdrawal.amount,
-            withdrawal.fee,
-            withdrawal.pending,
+        withdrawals[id] = Withdrawal(
             false,
-            withdrawal.paused,
-            withdrawal.withdrawType
+            isPending,
+            false,
+            action.amount,
+            action.token,
+            action.fee,
+            action.receiver,
+            block.timestamp
         );
+        emit WithdrawalAdded(
+            id,
+            action.token,
+            action.amount,
+            action.fee,
+            action.receiver,
+            isPending,
+            isForcePending
+        );
+        if (!isPending) {
+            _executeWithdrawal(id, isPending, false, false);
+        }
     }
 
+    function batchTogglePendingWithdrawal(
+        uint256[] calldata ids,
+        bool shouldPause,
+        ValidatorInfo[] calldata validators,
+        bytes[] calldata validatorSignatures
+    ) external whenNotPaused onlyRole(OPERATOR_ROLE) nonReentrant {
+        if (ids.length == 0) {
+            revert EmptyIds();
+        }
+        bytes32 digest = keccak256(
+            abi.encode(
+                "batchTogglePendingWithdrawal",
+                ids,
+                block.chainid,
+                address(this),
+                shouldPause
+            )
+        );
+
+        _verifyValidatorSignature(validators, digest, validatorSignatures);
+
+        for (uint256 i = 0; i < ids.length; i++) {
+            Withdrawal storage withdrawal = withdrawals[ids[i]];
+            _refillWithdrawHotAmount(withdrawal.token);
+            // 1. executed withdrawal cannot be paused/unpaused
+            // 2. pending withdrawal cannot be paused/unpaused if challenge period is expired
+            _checkWithdrawalNotExecuted(ids[i]);
+            _checkWithdrawalPending(ids[i]);
+            if (block.timestamp >= withdrawal.timestamp + pendingWithdrawChallengePeriod) {
+                revert ChallengePeriodExpired();
+            }
+            if (withdrawal.paused == shouldPause) {
+                revert WithdrawAlreadyInDesiredState();
+            }
+            withdrawal.paused = shouldPause;
+            emit PendingWithdrawalToggled(ids[i], shouldPause);
+        }
+    }
+
+    function executePendingWithdrawal(
+        uint256 id,
+        ValidatorInfo[] calldata validators,
+        bytes[] calldata validatorSignatures
+    ) external whenNotPaused onlyRole(OPERATOR_ROLE) nonReentrant {
+        bytes32 digest = keccak256(
+            abi.encode(
+                "executePendingWithdrawal",
+                id,
+                block.chainid,
+                address(this)
+            )
+        );
+        _verifyValidatorSignature(validators, digest, validatorSignatures);
+        _checkWithdrawalExists(id, true);
+        _checkWithdrawalNotExecuted(id);
+        Withdrawal storage withdrawal = withdrawals[id];
+        _refillWithdrawHotAmount(withdrawal.token);
+        if (withdrawal.paused) {
+            revert WithdrawalPaused();
+        }
+        if (!withdrawal.pending) {
+            revert WithdrawalMustBePending();
+        }
+        if (block.timestamp < withdrawal.timestamp + pendingWithdrawChallengePeriod) {
+            revert ChallengePeriodNotExpired();
+        }
+        _executeWithdrawal(id, withdrawal.pending, false, withdrawal.paused);
+    }
+
+    // No matter the withdrawal is pending or not, paused or not, it will be executed when flushing
     function batchFlushWithdrawals(
         uint256[] calldata ids,
         ValidatorInfo[] calldata validators,
         bytes[] calldata validatorSignatures
     ) external whenNotPaused onlyRole(OPERATOR_ROLE) nonReentrant {
-        require(ids.length > 0, "empty ids");
+        if (ids.length == 0) {
+            revert EmptyIds();
+        }
         bytes32 digest = keccak256(
             abi.encode(
-                "batchFlush",
+                "batchFlushWithdrawals",
                 ids,
                 block.chainid,
                 address(this)
@@ -418,14 +465,35 @@ contract AssetVault is
         );
         _verifyValidatorSignature(validators, digest, validatorSignatures);
         for (uint256 i = 0; i < ids.length; i++) {
-            _flushWithdrawal(ids[i]);
+            uint256 id = ids[i];
+            _checkWithdrawalExists(id, true);
+            _checkWithdrawalNotExecuted(id);
+            Withdrawal storage withdrawal = withdrawals[id];
+            _refillWithdrawHotAmount(withdrawal.token);
+            _executeWithdrawal(id, withdrawal.pending, true, withdrawal.paused);
         }
     }
 
-    function batchResetWithdrawHotAmount(address[] calldata tokens) external onlyRole(OPERATOR_ROLE) {
-        require(tokens.length > 0, "empty tokens");
+    function batchResetWithdrawHotAmount(
+        address[] calldata tokens,
+        ValidatorInfo[] calldata validators,
+        bytes[] calldata validatorSignatures
+    ) external whenNotPaused onlyRole(OPERATOR_ROLE) nonReentrant {
+        if (tokens.length == 0) {
+            revert EmptyTokens();
+        }
+        bytes32 digest = keccak256(
+            abi.encode(
+                "batchResetWithdrawHotAmount",
+                tokens,
+                block.chainid,
+                address(this)
+            )
+        );
+        _verifyValidatorSignature(validators, digest, validatorSignatures);
         for (uint256 i = 0; i < tokens.length; i++) {
             _ensureTokenSupported(tokens[i]);
+            _refillWithdrawHotAmount(tokens[i]);
             supportedTokens[tokens[i]].usedWithdrawHotAmount = 0;
             supportedTokens[tokens[i]].lastRefillTimestamp = block.timestamp;
             emit WithdrawHotAmountRefilled(tokens[i], 0, 0);
@@ -438,13 +506,14 @@ contract AssetVault is
         uint256 hardCapRatioBps,
         uint256 refillRateMps
     ) internal pure {
-        require(
-            hardCapRatioBps > 0 &&
-                hardCapRatioBps <= 10000 &&
-                refillRateMps > 0 &&
-                refillRateMps <= 1000000,
-            "invalid parameters"
-        );
+        if (
+            hardCapRatioBps == 0 ||
+            hardCapRatioBps > 10000 ||
+            refillRateMps == 0 ||
+            refillRateMps > 1000000
+        ) {
+            revert InvalidParameters();
+        }
     }
 
     // validators must be sorted by address
@@ -455,21 +524,23 @@ contract AssetVault is
     ) internal view {
         bytes32 validatorHash = keccak256(abi.encode(validators));
         uint256 totalPower = availableValidators[validatorHash];
-        require(totalPower > 0, "invalid validators");
+        if (totalPower == 0) {
+            revert InvalidValidators();
+        }
         uint256 power = 0;
         uint256 validatorIndex = 0;
         bytes32 validatorDigest = MessageHashUtils.toEthSignedMessageHash(
             digest
         );
         for (
-            uint256 i = 0;
-            i < validatorSignatures.length &&
+            uint256 signatureIndex = 0;
+            signatureIndex < validatorSignatures.length &&
                 validatorIndex < validators.length;
-            i++
+            signatureIndex++
         ) {
             address recovered = ECDSA.recover(
                 validatorDigest,
-                validatorSignatures[i]
+                validatorSignatures[signatureIndex]
             );
             if (recovered == address(0)) {
                 continue;
@@ -483,12 +554,17 @@ contract AssetVault is
                 }
             }
         }
-        require(power >= (totalPower * 2) / 3, "not enough validator power");
+        if (power < (totalPower * 2) / 3) {
+            revert NotEnoughValidatorPower();
+        }
     }
 
     function _refillWithdrawHotAmount(address token) internal {
         TokenInfo storage tokenInfo = supportedTokens[token];
         uint256 refillPeriod = block.timestamp - tokenInfo.lastRefillTimestamp;
+        if (refillPeriod == 0) {
+            return;
+        }
         uint256 hardCap = (IERC20(token).balanceOf(address(this)) *
             tokenInfo.hardCapRatioBps) / 10000;
         uint256 refillAmount = (hardCap *
@@ -510,12 +586,12 @@ contract AssetVault is
     function _increaseUsedWithdrawHotAmount(
         TokenInfo storage tokenInfo,
         uint256 amount
-    ) internal returns (bool forcePending) {
+    ) internal returns (bool pendingTriggered) {
         uint256 hardCap = (IERC20(tokenInfo.token).balanceOf(address(this)) *
             tokenInfo.hardCapRatioBps) / 10000;
         // hard cap exceeded
         if (tokenInfo.usedWithdrawHotAmount + amount > hardCap) {
-            forcePending = true;
+            pendingTriggered = true;
         } else {
             tokenInfo.usedWithdrawHotAmount += amount;
         }
@@ -523,66 +599,17 @@ contract AssetVault is
             tokenInfo.token,
             amount,
             tokenInfo.usedWithdrawHotAmount,
-            forcePending
+            pendingTriggered
         );
     }
 
-    function _addWithdrawal(
+    function _executeWithdrawal(
         uint256 id,
-        address token,
-        uint256 amount,
-        uint256 fee,
-        address receiver,
-        WithdrawType withdrawType,
-        bool isPending
+        bool isPending,
+        bool isFlushed,
+        bool isPaused
     ) internal {
-        _checkWithdrawalExists(id, false);
-        withdrawals[id] = Withdrawal(
-            false,
-            isPending,
-            false,
-            amount,
-            token,
-            fee,
-            receiver,
-            block.timestamp,
-            withdrawType
-        );
-        emit WithdrawalAdded(
-            id,
-            token,
-            amount,
-            fee,
-            receiver,
-            withdrawType,
-            isPending
-        );
-    }
-
-    function _togglePendingWithdrawal(uint256 id, bool shouldPause) internal {
         Withdrawal storage withdrawal = withdrawals[id];
-        // 1. executed withdrawal cannot be paused/unpaused
-        // 2. pending withdrawal cannot be paused/unpaused if challenge period is expired
-        _checkWithdrawalNotExecuted(id);
-        _checkWithdrawalPending(id);
-        require(
-            block.timestamp <
-                withdrawal.timestamp + pendingWithdrawChallengePeriod,
-            "challenge period not expired"
-        );
-        require(
-            withdrawal.paused != shouldPause,
-            "withdraw already in desired state"
-        );
-        withdrawal.paused = shouldPause;
-        emit PendingWithdrawalToggled(id, shouldPause);
-    }
-
-    // No matter the withdrawal is pending or not, paused or not, it will be executed when flushing
-    function _flushWithdrawal(uint256 id) internal {
-        _checkWithdrawalExists(id, true);
-        Withdrawal storage withdrawal = withdrawals[id];
-        _checkWithdrawalNotExecuted(id);
         _transfer(
             payable(withdrawal.receiver),
             withdrawal.token,
@@ -596,18 +623,16 @@ contract AssetVault is
             withdrawal.token,
             withdrawal.amount,
             withdrawal.fee,
-            withdrawal.pending,
-            true,
-            withdrawal.paused,
-            withdrawal.withdrawType
+            isPending,
+            isFlushed,
+            isPaused
         );
     }
 
     function _ensureTokenSupported(address token) internal view {
-        require(
-            supportedTokens[token].hardCapRatioBps > 0,
-            "token not supported"
-        );
+        if (supportedTokens[token].hardCapRatioBps == 0) {
+            revert TokenNotSupported();
+        }
     }
 
     function _checkWithdrawalExists(
@@ -615,15 +640,21 @@ contract AssetVault is
         bool shouldExist
     ) internal view {
         bool isExisting = withdrawals[id].timestamp > 0;
-        require(isExisting == shouldExist, "withdrawal existance check failed");
+        if (isExisting != shouldExist) {
+            revert WithdrawalExistenceCheckFailed();
+        }
     }
 
     function _checkWithdrawalNotExecuted(uint256 id) internal view {
-        require(!withdrawals[id].executed, "withdrawal already executed");
+        if (withdrawals[id].executed) {
+            revert WithdrawalAlreadyExecuted();
+        }
     }
 
     function _checkWithdrawalPending(uint256 id) internal view {
-        require(withdrawals[id].pending, "withdrawal must be pending");
+        if (!withdrawals[id].pending) {
+            revert WithdrawalMustBePending();
+        }
     }
 
     function _transfer(
@@ -632,7 +663,9 @@ contract AssetVault is
         uint256 amount,
         uint256 fee
     ) private {
-        require(amount > 0, "zero amount");
+        if (amount == 0) {
+            revert ZeroAmount();
+        }
         if (token == address(0)) {
             Address.sendValue(payable(to), amount);
         } else {
