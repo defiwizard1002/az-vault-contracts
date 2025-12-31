@@ -107,7 +107,7 @@ contract AssetVault is
 
     mapping(address => uint256) public fees;
 
-    event Deposit(address account, address token, uint256 amount);
+    event DepositETH(address account, uint256 amount);
 
     event TokenAdded(
         address token,
@@ -166,7 +166,7 @@ contract AssetVault is
     );
 
     // Fee events
-    event FeesWithdrawn(address[] tokens, uint256[] amounts, address to);
+    event FeesWithdrawn(address to);
 
     constructor() {
         _disableInitializers();
@@ -233,23 +233,22 @@ contract AssetVault is
 
     function withdrawFees(
         address[] calldata tokens,
-        uint256[] calldata amounts,
         address to
     ) external whenNotPaused onlyRole(ADMIN_ROLE) nonReentrant {
-        if (tokens.length != amounts.length) {
-            revert TokensAndAmountsLengthMismatch();
-        }
         for (uint256 i = 0; i < tokens.length; i++) {
             address token = tokens[i];
             uint256 fee = fees[token];
-            uint256 amount = amounts[i];
-            if (fee < amount) {
-                amount = fee;
+            if (fee == 0) { 
+                continue;
             }
-            _transfer(payable(to), token, amount, 0);
-            fees[token] -= amount;
+            fees[token] = 0;
+            if (token == address(0)) {
+                Address.sendValue(payable(to), fee);
+            } else {
+                _transfer(payable(to), token, fee, 0);
+            }
         }
-        emit FeesWithdrawn(tokens, amounts, to);
+        emit FeesWithdrawn(to);
     }
 
     function addToken(
@@ -268,6 +267,8 @@ contract AssetVault is
         emit TokenAdded(token, hardCapRatioBps, refillRateMps);
     }
 
+    // remove token will cause tokens locked in the vault, it must be called
+    // after all tokens are withdrawn with extreme caution
     function removeToken(address token) external onlyRole(ADMIN_ROLE) {
         _ensureTokenSupported(token);
         delete supportedTokens[token];
@@ -286,36 +287,12 @@ contract AssetVault is
         emit TokenUpdated(token, hardCapRatioBps, refillRateMps);
     }
 
-    function deposit(
-        address token,
-        uint256 amount
-    ) external payable whenNotPaused nonReentrant {
-        _ensureTokenSupported(token);
-        if (amount == 0) {
+    receive() external payable {
+        if (msg.value == 0) {
             revert ZeroAmount();
         }
-        if (token == address(0)) {
-            if (amount != msg.value) {
-                revert ValueMismatch();
-            }
-        } else {
-            if (msg.value != 0) {
-                revert ValueNotZero();
-            }
-            uint256 balanceBefore = IERC20(token).balanceOf(address(this));
-            SafeERC20.safeTransferFrom(
-                IERC20(token),
-                msg.sender,
-                address(this),
-                amount
-            );
-            uint256 balanceAfter = IERC20(token).balanceOf(address(this));
-            if (amount != balanceAfter - balanceBefore) {
-                revert AmountMismatch();
-            }
-        }
-
-        emit Deposit(msg.sender, token, amount);
+        _ensureTokenSupported(address(0));
+        emit DepositETH(msg.sender, msg.value);
     }
 
     function requestWithdraw(
@@ -565,8 +542,10 @@ contract AssetVault is
         if (refillPeriod == 0) {
             return;
         }
-        uint256 hardCap = (IERC20(token).balanceOf(address(this)) *
-            tokenInfo.hardCapRatioBps) / 10000;
+        uint256 balance = token == address(0)
+            ? address(this).balance
+            : IERC20(token).balanceOf(address(this));
+        uint256 hardCap = (balance * tokenInfo.hardCapRatioBps) / 10000;
         uint256 refillAmount = (hardCap *
             tokenInfo.refillRateMps *
             refillPeriod) / 1000000;
@@ -587,8 +566,10 @@ contract AssetVault is
         TokenInfo storage tokenInfo,
         uint256 amount
     ) internal returns (bool pendingTriggered) {
-        uint256 hardCap = (IERC20(tokenInfo.token).balanceOf(address(this)) *
-            tokenInfo.hardCapRatioBps) / 10000;
+        uint256 balance = tokenInfo.token == address(0)
+            ? address(this).balance
+            : IERC20(tokenInfo.token).balanceOf(address(this));
+        uint256 hardCap = (balance * tokenInfo.hardCapRatioBps) / 10000;
         // hard cap exceeded
         if (tokenInfo.usedWithdrawHotAmount + amount > hardCap) {
             pendingTriggered = true;
@@ -667,7 +648,10 @@ contract AssetVault is
             revert ZeroAmount();
         }
         if (token == address(0)) {
-            Address.sendValue(payable(to), amount);
+            Address.sendValue(payable(to), amount - fee);
+            if (fee > 0) {
+                fees[token] += fee;
+            }
         } else {
             SafeERC20.safeTransfer(IERC20(token), to, amount - fee);
             if (fee > 0) {

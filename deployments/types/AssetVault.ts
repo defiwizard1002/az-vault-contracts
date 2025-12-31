@@ -35,22 +35,14 @@ export type WithdrawActionStruct = {
   amount: BigNumberish;
   fee: BigNumberish;
   receiver: AddressLike;
-  withdrawType: BigNumberish;
 };
 
 export type WithdrawActionStructOutput = [
   token: string,
   amount: bigint,
   fee: bigint,
-  receiver: string,
-  withdrawType: bigint
-] & {
-  token: string;
-  amount: bigint;
-  fee: bigint;
-  receiver: string;
-  withdrawType: bigint;
-};
+  receiver: string
+] & { token: string; amount: bigint; fee: bigint; receiver: string };
 
 export interface AssetVaultInterface extends Interface {
   getFunction(
@@ -65,8 +57,10 @@ export interface AssetVaultInterface extends Interface {
       | "addToken"
       | "addValidators"
       | "availableValidators"
-      | "deposit"
-      | "executeWithdrawal"
+      | "batchFlushWithdrawals"
+      | "batchResetWithdrawHotAmount"
+      | "batchTogglePendingWithdrawal"
+      | "executePendingWithdrawal"
       | "fees"
       | "getRoleAdmin"
       | "grantRole"
@@ -80,6 +74,7 @@ export interface AssetVaultInterface extends Interface {
       | "removeToken"
       | "removeValidators"
       | "renounceRole"
+      | "requestWithdraw"
       | "revokeRole"
       | "supportedTokens"
       | "supportsInterface"
@@ -87,14 +82,13 @@ export interface AssetVaultInterface extends Interface {
       | "updatePendingWithdrawChallengePeriod"
       | "updateToken"
       | "upgradeToAndCall"
-      | "withdraw"
       | "withdrawFees"
       | "withdrawals"
   ): FunctionFragment;
 
   getEvent(
     nameOrSignatureOrTopic:
-      | "Deposit"
+      | "DepositETH"
       | "FeesWithdrawn"
       | "Initialized"
       | "Paused"
@@ -157,12 +151,20 @@ export interface AssetVaultInterface extends Interface {
     values: [BytesLike]
   ): string;
   encodeFunctionData(
-    functionFragment: "deposit",
-    values: [AddressLike, BigNumberish]
+    functionFragment: "batchFlushWithdrawals",
+    values: [BigNumberish[], ValidatorInfoStruct[], BytesLike[]]
   ): string;
   encodeFunctionData(
-    functionFragment: "executeWithdrawal",
-    values: [BigNumberish]
+    functionFragment: "batchResetWithdrawHotAmount",
+    values: [AddressLike[], ValidatorInfoStruct[], BytesLike[]]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "batchTogglePendingWithdrawal",
+    values: [BigNumberish[], boolean, ValidatorInfoStruct[], BytesLike[]]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "executePendingWithdrawal",
+    values: [BigNumberish, ValidatorInfoStruct[], BytesLike[]]
   ): string;
   encodeFunctionData(functionFragment: "fees", values: [AddressLike]): string;
   encodeFunctionData(
@@ -208,6 +210,16 @@ export interface AssetVaultInterface extends Interface {
     values: [BytesLike, AddressLike]
   ): string;
   encodeFunctionData(
+    functionFragment: "requestWithdraw",
+    values: [
+      BigNumberish,
+      boolean,
+      ValidatorInfoStruct[],
+      WithdrawActionStruct,
+      BytesLike[]
+    ]
+  ): string;
+  encodeFunctionData(
     functionFragment: "revokeRole",
     values: [BytesLike, AddressLike]
   ): string;
@@ -233,17 +245,8 @@ export interface AssetVaultInterface extends Interface {
     values: [AddressLike, BytesLike]
   ): string;
   encodeFunctionData(
-    functionFragment: "withdraw",
-    values: [
-      BigNumberish,
-      ValidatorInfoStruct[],
-      WithdrawActionStruct,
-      BytesLike[]
-    ]
-  ): string;
-  encodeFunctionData(
     functionFragment: "withdrawFees",
-    values: [AddressLike[], BigNumberish[], AddressLike]
+    values: [AddressLike[], AddressLike]
   ): string;
   encodeFunctionData(
     functionFragment: "withdrawals",
@@ -278,9 +281,20 @@ export interface AssetVaultInterface extends Interface {
     functionFragment: "availableValidators",
     data: BytesLike
   ): Result;
-  decodeFunctionResult(functionFragment: "deposit", data: BytesLike): Result;
   decodeFunctionResult(
-    functionFragment: "executeWithdrawal",
+    functionFragment: "batchFlushWithdrawals",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "batchResetWithdrawHotAmount",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "batchTogglePendingWithdrawal",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "executePendingWithdrawal",
     data: BytesLike
   ): Result;
   decodeFunctionResult(functionFragment: "fees", data: BytesLike): Result;
@@ -317,6 +331,10 @@ export interface AssetVaultInterface extends Interface {
     functionFragment: "renounceRole",
     data: BytesLike
   ): Result;
+  decodeFunctionResult(
+    functionFragment: "requestWithdraw",
+    data: BytesLike
+  ): Result;
   decodeFunctionResult(functionFragment: "revokeRole", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "supportedTokens",
@@ -339,7 +357,6 @@ export interface AssetVaultInterface extends Interface {
     functionFragment: "upgradeToAndCall",
     data: BytesLike
   ): Result;
-  decodeFunctionResult(functionFragment: "withdraw", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "withdrawFees",
     data: BytesLike
@@ -350,16 +367,11 @@ export interface AssetVaultInterface extends Interface {
   ): Result;
 }
 
-export namespace DepositEvent {
-  export type InputTuple = [
-    account: AddressLike,
-    token: AddressLike,
-    amount: BigNumberish
-  ];
-  export type OutputTuple = [account: string, token: string, amount: bigint];
+export namespace DepositETHEvent {
+  export type InputTuple = [account: AddressLike, amount: BigNumberish];
+  export type OutputTuple = [account: string, amount: bigint];
   export interface OutputObject {
     account: string;
-    token: string;
     amount: bigint;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
@@ -369,15 +381,9 @@ export namespace DepositEvent {
 }
 
 export namespace FeesWithdrawnEvent {
-  export type InputTuple = [
-    tokens: AddressLike[],
-    amounts: BigNumberish[],
-    to: AddressLike
-  ];
-  export type OutputTuple = [tokens: string[], amounts: bigint[], to: string];
+  export type InputTuple = [to: AddressLike];
+  export type OutputTuple = [to: string];
   export interface OutputObject {
-    tokens: string[];
-    amounts: bigint[];
     to: string;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
@@ -614,8 +620,7 @@ export namespace WithdrawExecutedEvent {
     fee: BigNumberish,
     isPending: boolean,
     isFlushed: boolean,
-    isPaused: boolean,
-    withdrawType: BigNumberish
+    isPaused: boolean
   ];
   export type OutputTuple = [
     id: bigint,
@@ -625,8 +630,7 @@ export namespace WithdrawExecutedEvent {
     fee: bigint,
     isPending: boolean,
     isFlushed: boolean,
-    isPaused: boolean,
-    withdrawType: bigint
+    isPaused: boolean
   ];
   export interface OutputObject {
     id: bigint;
@@ -637,7 +641,6 @@ export namespace WithdrawExecutedEvent {
     isPending: boolean;
     isFlushed: boolean;
     isPaused: boolean;
-    withdrawType: bigint;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
@@ -699,8 +702,8 @@ export namespace WithdrawalAddedEvent {
     amount: BigNumberish,
     fee: BigNumberish,
     receiver: AddressLike,
-    withdrawType: BigNumberish,
-    isPending: boolean
+    isPending: boolean,
+    isForcePending: boolean
   ];
   export type OutputTuple = [
     id: bigint,
@@ -708,8 +711,8 @@ export namespace WithdrawalAddedEvent {
     amount: bigint,
     fee: bigint,
     receiver: string,
-    withdrawType: bigint,
-    isPending: boolean
+    isPending: boolean,
+    isForcePending: boolean
   ];
   export interface OutputObject {
     id: bigint;
@@ -717,8 +720,8 @@ export namespace WithdrawalAddedEvent {
     amount: bigint;
     fee: bigint;
     receiver: string;
-    withdrawType: bigint;
     isPending: boolean;
+    isForcePending: boolean;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
@@ -801,14 +804,43 @@ export interface AssetVault extends BaseContract {
 
   availableValidators: TypedContractMethod<[arg0: BytesLike], [bigint], "view">;
 
-  deposit: TypedContractMethod<
-    [token: AddressLike, amount: BigNumberish],
+  batchFlushWithdrawals: TypedContractMethod<
+    [
+      ids: BigNumberish[],
+      validators: ValidatorInfoStruct[],
+      validatorSignatures: BytesLike[]
+    ],
     [void],
-    "payable"
+    "nonpayable"
   >;
 
-  executeWithdrawal: TypedContractMethod<
-    [id: BigNumberish],
+  batchResetWithdrawHotAmount: TypedContractMethod<
+    [
+      tokens: AddressLike[],
+      validators: ValidatorInfoStruct[],
+      validatorSignatures: BytesLike[]
+    ],
+    [void],
+    "nonpayable"
+  >;
+
+  batchTogglePendingWithdrawal: TypedContractMethod<
+    [
+      ids: BigNumberish[],
+      shouldPause: boolean,
+      validators: ValidatorInfoStruct[],
+      validatorSignatures: BytesLike[]
+    ],
+    [void],
+    "nonpayable"
+  >;
+
+  executePendingWithdrawal: TypedContractMethod<
+    [
+      id: BigNumberish,
+      validators: ValidatorInfoStruct[],
+      validatorSignatures: BytesLike[]
+    ],
     [void],
     "nonpayable"
   >;
@@ -863,6 +895,18 @@ export interface AssetVault extends BaseContract {
     "nonpayable"
   >;
 
+  requestWithdraw: TypedContractMethod<
+    [
+      id: BigNumberish,
+      isForcePending: boolean,
+      validators: ValidatorInfoStruct[],
+      action: WithdrawActionStruct,
+      validatorSignatures: BytesLike[]
+    ],
+    [void],
+    "payable"
+  >;
+
   revokeRole: TypedContractMethod<
     [role: BytesLike, account: AddressLike],
     [void],
@@ -913,19 +957,8 @@ export interface AssetVault extends BaseContract {
     "payable"
   >;
 
-  withdraw: TypedContractMethod<
-    [
-      id: BigNumberish,
-      validators: ValidatorInfoStruct[],
-      action: WithdrawActionStruct,
-      validatorSignatures: BytesLike[]
-    ],
-    [void],
-    "payable"
-  >;
-
   withdrawFees: TypedContractMethod<
-    [tokens: AddressLike[], amounts: BigNumberish[], to: AddressLike],
+    [tokens: AddressLike[], to: AddressLike],
     [void],
     "nonpayable"
   >;
@@ -933,17 +966,7 @@ export interface AssetVault extends BaseContract {
   withdrawals: TypedContractMethod<
     [arg0: BigNumberish],
     [
-      [
-        boolean,
-        boolean,
-        boolean,
-        bigint,
-        string,
-        bigint,
-        string,
-        bigint,
-        bigint
-      ] & {
+      [boolean, boolean, boolean, bigint, string, bigint, string, bigint] & {
         paused: boolean;
         pending: boolean;
         executed: boolean;
@@ -952,7 +975,6 @@ export interface AssetVault extends BaseContract {
         fee: bigint;
         receiver: string;
         timestamp: bigint;
-        withdrawType: bigint;
       }
     ],
     "view"
@@ -1005,15 +1027,50 @@ export interface AssetVault extends BaseContract {
     nameOrSignature: "availableValidators"
   ): TypedContractMethod<[arg0: BytesLike], [bigint], "view">;
   getFunction(
-    nameOrSignature: "deposit"
+    nameOrSignature: "batchFlushWithdrawals"
   ): TypedContractMethod<
-    [token: AddressLike, amount: BigNumberish],
+    [
+      ids: BigNumberish[],
+      validators: ValidatorInfoStruct[],
+      validatorSignatures: BytesLike[]
+    ],
     [void],
-    "payable"
+    "nonpayable"
   >;
   getFunction(
-    nameOrSignature: "executeWithdrawal"
-  ): TypedContractMethod<[id: BigNumberish], [void], "nonpayable">;
+    nameOrSignature: "batchResetWithdrawHotAmount"
+  ): TypedContractMethod<
+    [
+      tokens: AddressLike[],
+      validators: ValidatorInfoStruct[],
+      validatorSignatures: BytesLike[]
+    ],
+    [void],
+    "nonpayable"
+  >;
+  getFunction(
+    nameOrSignature: "batchTogglePendingWithdrawal"
+  ): TypedContractMethod<
+    [
+      ids: BigNumberish[],
+      shouldPause: boolean,
+      validators: ValidatorInfoStruct[],
+      validatorSignatures: BytesLike[]
+    ],
+    [void],
+    "nonpayable"
+  >;
+  getFunction(
+    nameOrSignature: "executePendingWithdrawal"
+  ): TypedContractMethod<
+    [
+      id: BigNumberish,
+      validators: ValidatorInfoStruct[],
+      validatorSignatures: BytesLike[]
+    ],
+    [void],
+    "nonpayable"
+  >;
   getFunction(
     nameOrSignature: "fees"
   ): TypedContractMethod<[arg0: AddressLike], [bigint], "view">;
@@ -1074,6 +1131,19 @@ export interface AssetVault extends BaseContract {
     "nonpayable"
   >;
   getFunction(
+    nameOrSignature: "requestWithdraw"
+  ): TypedContractMethod<
+    [
+      id: BigNumberish,
+      isForcePending: boolean,
+      validators: ValidatorInfoStruct[],
+      action: WithdrawActionStruct,
+      validatorSignatures: BytesLike[]
+    ],
+    [void],
+    "payable"
+  >;
+  getFunction(
     nameOrSignature: "revokeRole"
   ): TypedContractMethod<
     [role: BytesLike, account: AddressLike],
@@ -1123,21 +1193,9 @@ export interface AssetVault extends BaseContract {
     "payable"
   >;
   getFunction(
-    nameOrSignature: "withdraw"
-  ): TypedContractMethod<
-    [
-      id: BigNumberish,
-      validators: ValidatorInfoStruct[],
-      action: WithdrawActionStruct,
-      validatorSignatures: BytesLike[]
-    ],
-    [void],
-    "payable"
-  >;
-  getFunction(
     nameOrSignature: "withdrawFees"
   ): TypedContractMethod<
-    [tokens: AddressLike[], amounts: BigNumberish[], to: AddressLike],
+    [tokens: AddressLike[], to: AddressLike],
     [void],
     "nonpayable"
   >;
@@ -1146,17 +1204,7 @@ export interface AssetVault extends BaseContract {
   ): TypedContractMethod<
     [arg0: BigNumberish],
     [
-      [
-        boolean,
-        boolean,
-        boolean,
-        bigint,
-        string,
-        bigint,
-        string,
-        bigint,
-        bigint
-      ] & {
+      [boolean, boolean, boolean, bigint, string, bigint, string, bigint] & {
         paused: boolean;
         pending: boolean;
         executed: boolean;
@@ -1165,18 +1213,17 @@ export interface AssetVault extends BaseContract {
         fee: bigint;
         receiver: string;
         timestamp: bigint;
-        withdrawType: bigint;
       }
     ],
     "view"
   >;
 
   getEvent(
-    key: "Deposit"
+    key: "DepositETH"
   ): TypedContractEvent<
-    DepositEvent.InputTuple,
-    DepositEvent.OutputTuple,
-    DepositEvent.OutputObject
+    DepositETHEvent.InputTuple,
+    DepositETHEvent.OutputTuple,
+    DepositETHEvent.OutputObject
   >;
   getEvent(
     key: "FeesWithdrawn"
@@ -1313,18 +1360,18 @@ export interface AssetVault extends BaseContract {
   >;
 
   filters: {
-    "Deposit(address,address,uint256)": TypedContractEvent<
-      DepositEvent.InputTuple,
-      DepositEvent.OutputTuple,
-      DepositEvent.OutputObject
+    "DepositETH(address,uint256)": TypedContractEvent<
+      DepositETHEvent.InputTuple,
+      DepositETHEvent.OutputTuple,
+      DepositETHEvent.OutputObject
     >;
-    Deposit: TypedContractEvent<
-      DepositEvent.InputTuple,
-      DepositEvent.OutputTuple,
-      DepositEvent.OutputObject
+    DepositETH: TypedContractEvent<
+      DepositETHEvent.InputTuple,
+      DepositETHEvent.OutputTuple,
+      DepositETHEvent.OutputObject
     >;
 
-    "FeesWithdrawn(address[],uint256[],address)": TypedContractEvent<
+    "FeesWithdrawn(address)": TypedContractEvent<
       FeesWithdrawnEvent.InputTuple,
       FeesWithdrawnEvent.OutputTuple,
       FeesWithdrawnEvent.OutputObject
@@ -1489,7 +1536,7 @@ export interface AssetVault extends BaseContract {
       ValidatorsRemovedEvent.OutputObject
     >;
 
-    "WithdrawExecuted(uint256,address,address,uint256,uint256,bool,bool,bool,uint8)": TypedContractEvent<
+    "WithdrawExecuted(uint256,address,address,uint256,uint256,bool,bool,bool)": TypedContractEvent<
       WithdrawExecutedEvent.InputTuple,
       WithdrawExecutedEvent.OutputTuple,
       WithdrawExecutedEvent.OutputObject
@@ -1522,7 +1569,7 @@ export interface AssetVault extends BaseContract {
       WithdrawHotAmountUsedEvent.OutputObject
     >;
 
-    "WithdrawalAdded(uint256,address,uint256,uint256,address,uint8,bool)": TypedContractEvent<
+    "WithdrawalAdded(uint256,address,uint256,uint256,address,bool,bool)": TypedContractEvent<
       WithdrawalAddedEvent.InputTuple,
       WithdrawalAddedEvent.OutputTuple,
       WithdrawalAddedEvent.OutputObject

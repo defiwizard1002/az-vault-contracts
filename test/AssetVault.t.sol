@@ -157,44 +157,24 @@ contract AssetVaultTest is Test {
         vault.updateToken(address(unsupported), 6000, 2000);
     }
 
-    function test_Deposit_OnlySupportedToken() public {
-        MockERC20 unsupported = new MockERC20("Unsupported", "U");
-        vm.startPrank(user);
-        unsupported.mint(user, 100e18);
-        unsupported.approve(address(vault), 100e18);
-        vm.expectRevert(AssetVault.TokenNotSupported.selector);
-        vault.deposit(address(unsupported), 100e18);
-        vm.stopPrank();
-    }
-
     function test_Deposit_ERC20() public {
         vm.startPrank(user);
-        token1.approve(address(vault), 100e18);
-        vm.expectEmit(true, true, false, true);
-        emit AssetVault.Deposit(user, address(token1), 100e18);
-        vault.deposit(address(token1), 100e18);
+        assertTrue(token1.transfer(address(vault), 100e18));
         vm.stopPrank();
         assertEq(token1.balanceOf(address(vault)), 100e18);
     }
 
+
     function test_Deposit_ETH() public {
         vm.deal(user, 10e18);
         vm.expectEmit(true, true, false, true);
-        emit AssetVault.Deposit(user, address(0), 10e18);
+        emit AssetVault.DepositETH(user, 10e18);
         vm.prank(user);
-        vault.deposit{value: 10e18}(address(0), 10e18);
+        (bool success, ) = payable(address(vault)).call{value: 10e18}("");
+        require(success, "ETH transfer failed");
         assertEq(address(vault).balance, 10e18);
     }
 
-    function test_Deposit_WhenPaused_Reverts() public {
-        vm.prank(pauseRole);
-        vault.pause();
-        vm.startPrank(user);
-        token1.approve(address(vault), 100e18);
-        vm.expectRevert();
-        vault.deposit(address(token1), 100e18);
-        vm.stopPrank();
-    }
 
     function test_AddValidators_OnlyAdmin() public {
         ValidatorInfo[] memory newValidators = new ValidatorInfo[](2);
@@ -261,8 +241,7 @@ contract AssetVaultTest is Test {
 
     function test_RefillWithdrawHotAmount() public {
         vm.startPrank(user);
-        token1.approve(address(vault), 1000e18);
-        vault.deposit(address(token1), 1000e18);
+        assertTrue(token1.transfer(address(vault), 1000e18));
         vm.stopPrank();
 
         uint256 id = 1;
@@ -287,7 +266,7 @@ contract AssetVaultTest is Test {
 
         AssetVaultV2 vaultV2 = AssetVaultV2(payable(address(vault)));
         
-        (address token, uint256 hardCapRatioBps, uint256 refillRateMps, uint256 lastRefillBefore, uint256 usedBefore) = vault.supportedTokens(address(token1));
+        (, uint256 hardCapRatioBps, uint256 refillRateMps, , uint256 usedBefore) = vault.supportedTokens(address(token1));
         
         uint256 balance = token1.balanceOf(address(vault));
         uint256 hardCap = (balance * hardCapRatioBps) / 10000;
@@ -318,8 +297,7 @@ contract AssetVaultTest is Test {
 
     function test_IncreaseUsedWithdrawHotAmount() public {
         vm.startPrank(user);
-        token1.approve(address(vault), 1000e18);
-        vault.deposit(address(token1), 1000e18);
+        assertTrue(token1.transfer(address(vault), 1000e18));
         vm.stopPrank();
 
         implementationV2 = new AssetVaultV2();
@@ -356,8 +334,7 @@ contract AssetVaultTest is Test {
 
     function test_NormalWithdraw_Success() public {
         vm.startPrank(user);
-        token1.approve(address(vault), 1000e18);
-        vault.deposit(address(token1), 1000e18);
+        assertTrue(token1.transfer(address(vault), 1000e18));
         vm.stopPrank();
 
         uint256 id = 1;
@@ -383,7 +360,7 @@ contract AssetVaultTest is Test {
 
         assertEq(token1.balanceOf(receiver), amount - fee);
         assertEq(vault.fees(address(token1)), fee);
-        (bool paused, bool pending, bool executed, , , , , ) = vault.withdrawals(id);
+        (, bool pending, bool executed, , , , , ) = vault.withdrawals(id);
         assertTrue(executed);
         assertFalse(pending);
         (, , , , uint256 usedAfter) = vault.supportedTokens(address(token1));
@@ -392,8 +369,7 @@ contract AssetVaultTest is Test {
 
     function test_PendingWithdraw_Triggered() public {
         vm.startPrank(user);
-        token1.approve(address(vault), 1000e18);
-        vault.deposit(address(token1), 1000e18);
+        assertTrue(token1.transfer(address(vault), 1000e18));
         vm.stopPrank();
 
         uint256 hardCap = (1000e18 * 5000) / 10000;
@@ -418,7 +394,7 @@ contract AssetVaultTest is Test {
 
         (, , , , uint256 usedAfter) = vault.supportedTokens(address(token1));
         assertEq(usedAfter, usedBefore);
-        (bool paused, bool pending, bool executed, uint256 withdrawalAmount, , , , ) = vault.withdrawals(id);
+        (, bool pending, bool executed, uint256 withdrawalAmount, , , , ) = vault.withdrawals(id);
         assertTrue(pending);
         assertFalse(executed);
         assertEq(withdrawalAmount, amount);
@@ -431,8 +407,7 @@ contract AssetVaultTest is Test {
 
     function test_ForcePendingWithdraw() public {
         vm.startPrank(user);
-        token1.approve(address(vault), 1000e18);
-        vault.deposit(address(token1), 1000e18);
+        assertTrue(token1.transfer(address(vault), 1000e18));
         vm.stopPrank();
 
         uint256 id = 1;
@@ -457,7 +432,7 @@ contract AssetVaultTest is Test {
 
         (, , , , uint256 usedAfter) = vault.supportedTokens(address(token1));
         assertEq(usedAfter, usedBefore);
-        (bool paused, bool pending, bool executed, , , , , ) = vault.withdrawals(id);
+        (, bool pending, bool executed, , , , , ) = vault.withdrawals(id);
         assertTrue(pending);
         assertFalse(executed);
 
@@ -469,8 +444,7 @@ contract AssetVaultTest is Test {
 
     function test_PauseWithdraw_OnlyPendingNotExpired() public {
         vm.startPrank(user);
-        token1.approve(address(vault), 1000e18);
-        vault.deposit(address(token1), 1000e18);
+        assertTrue(token1.transfer(address(vault), 1000e18));
         vm.stopPrank();
 
         uint256 hardCap = (1000e18 * 5000) / 10000;
@@ -515,8 +489,7 @@ contract AssetVaultTest is Test {
 
     function test_PauseWithdraw_Executed_Reverts() public {
         vm.startPrank(user);
-        token1.approve(address(vault), 1000e18);
-        vault.deposit(address(token1), 1000e18);
+        assertTrue(token1.transfer(address(vault), 1000e18));
         vm.stopPrank();
 
         uint256 id = 1;
@@ -549,8 +522,7 @@ contract AssetVaultTest is Test {
 
     function test_PendingWithdraw_ExecuteAfterChallengePeriod() public {
         vm.startPrank(user);
-        token1.approve(address(vault), 1000e18);
-        vault.deposit(address(token1), 1000e18);
+        assertTrue(token1.transfer(address(vault), 1000e18));
         vm.stopPrank();
 
         uint256 hardCap = (1000e18 * 5000) / 10000;
@@ -589,8 +561,7 @@ contract AssetVaultTest is Test {
 
     function test_PendingWithdraw_RevertExecuteBeforeChallengePeriod() public {
         vm.startPrank(user);
-        token1.approve(address(vault), 1000e18);
-        vault.deposit(address(token1), 1000e18);
+        assertTrue(token1.transfer(address(vault), 1000e18));
         vm.stopPrank();
 
         uint256 hardCap = (1000e18 * 5000) / 10000;
@@ -625,8 +596,7 @@ contract AssetVaultTest is Test {
 
     function test_FlushWithdraw_PendingNotExpired_Success() public {
         vm.startPrank(user);
-        token1.approve(address(vault), 1000e18);
-        vault.deposit(address(token1), 1000e18);
+        assertTrue(token1.transfer(address(vault), 1000e18));
         vm.stopPrank();
 
         FlushTestData memory testData;
@@ -677,8 +647,7 @@ contract AssetVaultTest is Test {
 
     function test_FlushWithdraw_Paused_Success() public {
         vm.startPrank(user);
-        token1.approve(address(vault), 1000e18);
-        vault.deposit(address(token1), 1000e18);
+        assertTrue(token1.transfer(address(vault), 1000e18));
         vm.stopPrank();
 
         FlushTestData memory testData;
@@ -727,8 +696,7 @@ contract AssetVaultTest is Test {
 
     function test_Withdraw_WrongSignature_ModifiedSignature_Reverts() public {
         vm.startPrank(user);
-        token1.approve(address(vault), 1000e18);
-        vault.deposit(address(token1), 1000e18);
+        assertTrue(token1.transfer(address(vault), 1000e18));
         vm.stopPrank();
 
         uint256 id = 1;
@@ -759,8 +727,7 @@ contract AssetVaultTest is Test {
 
     function test_Withdraw_WrongSignature_ModifiedAction_Reverts() public {
         vm.startPrank(user);
-        token1.approve(address(vault), 1000e18);
-        vault.deposit(address(token1), 1000e18);
+        assertTrue(token1.transfer(address(vault), 1000e18));
         vm.stopPrank();
 
         uint256 id = 1;
@@ -794,8 +761,7 @@ contract AssetVaultTest is Test {
 
     function test_Withdraw_WrongSignature_WrongId_Reverts() public {
         vm.startPrank(user);
-        token1.approve(address(vault), 1000e18);
-        vault.deposit(address(token1), 1000e18);
+        assertTrue(token1.transfer(address(vault), 1000e18));
         vm.stopPrank();
 
         uint256 id = 1;
@@ -1037,8 +1003,7 @@ contract AssetVaultTest is Test {
 
     function test_BatchFlushWithdrawals_Success() public {
         vm.startPrank(user);
-        token1.approve(address(vault), 2000e18);
-        vault.deposit(address(token1), 2000e18);
+        assertTrue(token1.transfer(address(vault), 2000e18));
         vm.stopPrank();
 
         BatchFlushTestData memory testData;
@@ -1115,10 +1080,8 @@ contract AssetVaultTest is Test {
 
     function test_BatchResetWithdrawHotAmount_Success() public {
         vm.startPrank(user);
-        token1.approve(address(vault), 1000e18);
-        token2.approve(address(vault), 1000e18);
-        vault.deposit(address(token1), 1000e18);
-        vault.deposit(address(token2), 1000e18);
+        assertTrue(token1.transfer(address(vault), 1000e18));
+        assertTrue(token2.transfer(address(vault), 1000e18));
         vm.stopPrank();
 
         uint256 id1 = 1;
@@ -1205,6 +1168,146 @@ contract AssetVaultTest is Test {
         uint256[] memory ids = new uint256[](0);
         bytes[] memory signatures = new bytes[](0);
         vault.batchFlushWithdrawals(ids, validators, signatures);
+    }
+
+    function test_WithdrawFees_ERC20() public {
+        vm.startPrank(user);
+        assertTrue(token1.transfer(address(vault), 1000e18));
+        vm.stopPrank();
+
+        uint256 id = 1;
+        uint256 amount = 100e18;
+        uint256 fee = 5e18;
+        address receiver = address(0x100);
+
+        WithdrawTestData memory data = _prepareRequestWithdrawData(
+            id,
+            address(token1),
+            amount,
+            fee,
+            receiver,
+            false
+        );
+
+        vm.prank(operator);
+        vault.requestWithdraw(id, false, data.validators, data.action, data.signatures);
+
+        assertEq(vault.fees(address(token1)), fee);
+
+        address feeReceiver = address(0x200);
+        address[] memory tokens = new address[](1);
+        tokens[0] = address(token1);
+
+        uint256 receiverBalanceBefore = token1.balanceOf(feeReceiver);
+        vm.expectEmit(true, false, false, true);
+        emit AssetVault.FeesWithdrawn(feeReceiver);
+        vm.prank(admin);
+        vault.withdrawFees(tokens, feeReceiver);
+
+        assertEq(token1.balanceOf(feeReceiver), receiverBalanceBefore + fee);
+        assertEq(vault.fees(address(token1)), 0);
+    }
+
+    function test_WithdrawFees_ETH() public {
+        vm.deal(user, 10e18);
+        vm.prank(user);
+        (bool success, ) = payable(address(vault)).call{value: 10e18}("");
+        require(success, "ETH transfer failed");
+
+        uint256 id = 1;
+        uint256 amount = 5e18;
+        uint256 fee = 1e18;
+        address receiver = address(0x100);
+
+        WithdrawTestData memory data = _prepareRequestWithdrawData(
+            id,
+            address(0),
+            amount,
+            fee,
+            receiver,
+            false
+        );
+
+        vm.prank(operator);
+        vault.requestWithdraw(id, false, data.validators, data.action, data.signatures);
+
+        assertEq(vault.fees(address(0)), fee);
+
+        address feeReceiver = address(0x200);
+        address[] memory tokens = new address[](1);
+        tokens[0] = address(0);
+
+        uint256 receiverBalanceBefore = feeReceiver.balance;
+        vm.expectEmit(true, false, false, true);
+        emit AssetVault.FeesWithdrawn(feeReceiver);
+        vm.prank(admin);
+        vault.withdrawFees(tokens, feeReceiver);
+
+        assertEq(feeReceiver.balance, receiverBalanceBefore + fee);
+        assertEq(vault.fees(address(0)), 0);
+    }
+
+    function test_WithdrawFees_Mixed() public {
+        vm.startPrank(user);
+        assertTrue(token1.transfer(address(vault), 1000e18));
+        vm.stopPrank();
+
+        vm.deal(user, 10e18);
+        vm.prank(user);
+        (bool success, ) = payable(address(vault)).call{value: 10e18}("");
+        require(success, "ETH transfer failed");
+
+        uint256 id1 = 1;
+        uint256 id2 = 2;
+        uint256 amount1 = 100e18;
+        uint256 amount2 = 5e18;
+        uint256 fee1 = 5e18;
+        uint256 fee2 = 1e18;
+        address receiver = address(0x100);
+
+        WithdrawTestData memory data1 = _prepareRequestWithdrawData(
+            id1,
+            address(token1),
+            amount1,
+            fee1,
+            receiver,
+            false
+        );
+
+        WithdrawTestData memory data2 = _prepareRequestWithdrawData(
+            id2,
+            address(0),
+            amount2,
+            fee2,
+            receiver,
+            false
+        );
+
+        vm.prank(operator);
+        vault.requestWithdraw(id1, false, data1.validators, data1.action, data1.signatures);
+        vm.prank(operator);
+        vault.requestWithdraw(id2, false, data2.validators, data2.action, data2.signatures);
+
+        assertEq(vault.fees(address(token1)), fee1);
+        assertEq(vault.fees(address(0)), fee2);
+
+        address feeReceiver = address(0x200);
+        address[] memory tokens = new address[](2);
+        tokens[0] = address(token1);
+        tokens[1] = address(0);
+
+        uint256 tokenBalanceBefore = token1.balanceOf(feeReceiver);
+        uint256 ethBalanceBefore = feeReceiver.balance;
+
+        vm.expectEmit(true, false, false, true);
+        emit AssetVault.FeesWithdrawn(feeReceiver);
+        vm.prank(admin);
+        vault.withdrawFees(tokens, feeReceiver);
+
+        assertEq(token1.balanceOf(feeReceiver), tokenBalanceBefore + fee1);
+        assertEq(feeReceiver.balance, ethBalanceBefore + fee2);
+        assertEq(vault.fees(address(token1)), 0);
+        assertEq(vault.fees(address(0)), 0);
     }
 }
 

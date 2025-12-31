@@ -12,6 +12,10 @@ const _abi = [
     stateMutability: "nonpayable",
   },
   {
+    type: "receive",
+    stateMutability: "payable",
+  },
+  {
     type: "function",
     name: "ADMIN_ROLE",
     inputs: [],
@@ -171,30 +175,144 @@ const _abi = [
   },
   {
     type: "function",
-    name: "deposit",
+    name: "batchFlushWithdrawals",
     inputs: [
       {
-        name: "token",
-        type: "address",
-        internalType: "address",
+        name: "ids",
+        type: "uint256[]",
+        internalType: "uint256[]",
       },
       {
-        name: "amount",
-        type: "uint256",
-        internalType: "uint256",
+        name: "validators",
+        type: "tuple[]",
+        internalType: "struct ValidatorInfo[]",
+        components: [
+          {
+            name: "signer",
+            type: "address",
+            internalType: "address",
+          },
+          {
+            name: "power",
+            type: "uint256",
+            internalType: "uint256",
+          },
+        ],
+      },
+      {
+        name: "validatorSignatures",
+        type: "bytes[]",
+        internalType: "bytes[]",
       },
     ],
     outputs: [],
-    stateMutability: "payable",
+    stateMutability: "nonpayable",
   },
   {
     type: "function",
-    name: "executeWithdrawal",
+    name: "batchResetWithdrawHotAmount",
+    inputs: [
+      {
+        name: "tokens",
+        type: "address[]",
+        internalType: "address[]",
+      },
+      {
+        name: "validators",
+        type: "tuple[]",
+        internalType: "struct ValidatorInfo[]",
+        components: [
+          {
+            name: "signer",
+            type: "address",
+            internalType: "address",
+          },
+          {
+            name: "power",
+            type: "uint256",
+            internalType: "uint256",
+          },
+        ],
+      },
+      {
+        name: "validatorSignatures",
+        type: "bytes[]",
+        internalType: "bytes[]",
+      },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "batchTogglePendingWithdrawal",
+    inputs: [
+      {
+        name: "ids",
+        type: "uint256[]",
+        internalType: "uint256[]",
+      },
+      {
+        name: "shouldPause",
+        type: "bool",
+        internalType: "bool",
+      },
+      {
+        name: "validators",
+        type: "tuple[]",
+        internalType: "struct ValidatorInfo[]",
+        components: [
+          {
+            name: "signer",
+            type: "address",
+            internalType: "address",
+          },
+          {
+            name: "power",
+            type: "uint256",
+            internalType: "uint256",
+          },
+        ],
+      },
+      {
+        name: "validatorSignatures",
+        type: "bytes[]",
+        internalType: "bytes[]",
+      },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "executePendingWithdrawal",
     inputs: [
       {
         name: "id",
         type: "uint256",
         internalType: "uint256",
+      },
+      {
+        name: "validators",
+        type: "tuple[]",
+        internalType: "struct ValidatorInfo[]",
+        components: [
+          {
+            name: "signer",
+            type: "address",
+            internalType: "address",
+          },
+          {
+            name: "power",
+            type: "uint256",
+            internalType: "uint256",
+          },
+        ],
+      },
+      {
+        name: "validatorSignatures",
+        type: "bytes[]",
+        internalType: "bytes[]",
       },
     ],
     outputs: [],
@@ -416,6 +534,73 @@ const _abi = [
   },
   {
     type: "function",
+    name: "requestWithdraw",
+    inputs: [
+      {
+        name: "id",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "isForcePending",
+        type: "bool",
+        internalType: "bool",
+      },
+      {
+        name: "validators",
+        type: "tuple[]",
+        internalType: "struct ValidatorInfo[]",
+        components: [
+          {
+            name: "signer",
+            type: "address",
+            internalType: "address",
+          },
+          {
+            name: "power",
+            type: "uint256",
+            internalType: "uint256",
+          },
+        ],
+      },
+      {
+        name: "action",
+        type: "tuple",
+        internalType: "struct WithdrawAction",
+        components: [
+          {
+            name: "token",
+            type: "address",
+            internalType: "address",
+          },
+          {
+            name: "amount",
+            type: "uint256",
+            internalType: "uint256",
+          },
+          {
+            name: "fee",
+            type: "uint256",
+            internalType: "uint256",
+          },
+          {
+            name: "receiver",
+            type: "address",
+            internalType: "address",
+          },
+        ],
+      },
+      {
+        name: "validatorSignatures",
+        type: "bytes[]",
+        internalType: "bytes[]",
+      },
+    ],
+    outputs: [],
+    stateMutability: "payable",
+  },
+  {
+    type: "function",
     name: "revokeRole",
     inputs: [
       {
@@ -553,84 +738,12 @@ const _abi = [
   },
   {
     type: "function",
-    name: "withdraw",
-    inputs: [
-      {
-        name: "id",
-        type: "uint256",
-        internalType: "uint256",
-      },
-      {
-        name: "validators",
-        type: "tuple[]",
-        internalType: "struct ValidatorInfo[]",
-        components: [
-          {
-            name: "signer",
-            type: "address",
-            internalType: "address",
-          },
-          {
-            name: "power",
-            type: "uint256",
-            internalType: "uint256",
-          },
-        ],
-      },
-      {
-        name: "action",
-        type: "tuple",
-        internalType: "struct WithdrawAction",
-        components: [
-          {
-            name: "token",
-            type: "address",
-            internalType: "address",
-          },
-          {
-            name: "amount",
-            type: "uint256",
-            internalType: "uint256",
-          },
-          {
-            name: "fee",
-            type: "uint256",
-            internalType: "uint256",
-          },
-          {
-            name: "receiver",
-            type: "address",
-            internalType: "address",
-          },
-          {
-            name: "withdrawType",
-            type: "uint8",
-            internalType: "enum WithdrawType",
-          },
-        ],
-      },
-      {
-        name: "validatorSignatures",
-        type: "bytes[]",
-        internalType: "bytes[]",
-      },
-    ],
-    outputs: [],
-    stateMutability: "payable",
-  },
-  {
-    type: "function",
     name: "withdrawFees",
     inputs: [
       {
         name: "tokens",
         type: "address[]",
         internalType: "address[]",
-      },
-      {
-        name: "amounts",
-        type: "uint256[]",
-        internalType: "uint256[]",
       },
       {
         name: "to",
@@ -692,26 +805,15 @@ const _abi = [
         type: "uint256",
         internalType: "uint256",
       },
-      {
-        name: "withdrawType",
-        type: "uint8",
-        internalType: "enum WithdrawType",
-      },
     ],
     stateMutability: "view",
   },
   {
     type: "event",
-    name: "Deposit",
+    name: "DepositETH",
     inputs: [
       {
         name: "account",
-        type: "address",
-        indexed: false,
-        internalType: "address",
-      },
-      {
-        name: "token",
         type: "address",
         indexed: false,
         internalType: "address",
@@ -729,18 +831,6 @@ const _abi = [
     type: "event",
     name: "FeesWithdrawn",
     inputs: [
-      {
-        name: "tokens",
-        type: "address[]",
-        indexed: false,
-        internalType: "address[]",
-      },
-      {
-        name: "amounts",
-        type: "uint256[]",
-        indexed: false,
-        internalType: "uint256[]",
-      },
       {
         name: "to",
         type: "address",
@@ -1074,12 +1164,6 @@ const _abi = [
         indexed: false,
         internalType: "bool",
       },
-      {
-        name: "withdrawType",
-        type: "uint8",
-        indexed: false,
-        internalType: "enum WithdrawType",
-      },
     ],
     anonymous: false,
   },
@@ -1174,13 +1258,13 @@ const _abi = [
         internalType: "address",
       },
       {
-        name: "withdrawType",
-        type: "uint8",
+        name: "isPending",
+        type: "bool",
         indexed: false,
-        internalType: "enum WithdrawType",
+        internalType: "bool",
       },
       {
-        name: "isPending",
+        name: "isForcePending",
         type: "bool",
         indexed: false,
         internalType: "bool",
@@ -1219,6 +1303,21 @@ const _abi = [
         internalType: "address",
       },
     ],
+  },
+  {
+    type: "error",
+    name: "AmountMismatch",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "ChallengePeriodExpired",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "ChallengePeriodNotExpired",
+    inputs: [],
   },
   {
     type: "error",
@@ -1265,6 +1364,16 @@ const _abi = [
   },
   {
     type: "error",
+    name: "EmptyIds",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "EmptyTokens",
+    inputs: [],
+  },
+  {
+    type: "error",
     name: "EnforcedPause",
     inputs: [],
   },
@@ -1301,6 +1410,21 @@ const _abi = [
   },
   {
     type: "error",
+    name: "InvalidParameters",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "InvalidValidators",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "NotEnoughValidatorPower",
+    inputs: [],
+  },
+  {
+    type: "error",
     name: "NotInitializing",
     inputs: [],
   },
@@ -1322,6 +1446,21 @@ const _abi = [
   },
   {
     type: "error",
+    name: "TokenAlreadyExists",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "TokenNotSupported",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "TokensAndAmountsLengthMismatch",
+    inputs: [],
+  },
+  {
+    type: "error",
     name: "UUPSUnauthorizedCallContext",
     inputs: [],
   },
@@ -1335,6 +1474,61 @@ const _abi = [
         internalType: "bytes32",
       },
     ],
+  },
+  {
+    type: "error",
+    name: "ValidatorsAlreadySet",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "ValidatorsNotOrdered",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "ValidatorsNotSet",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "ValueMismatch",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "ValueNotZero",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "WithdrawAlreadyInDesiredState",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "WithdrawalAlreadyExecuted",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "WithdrawalExistenceCheckFailed",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "WithdrawalMustBePending",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "WithdrawalPaused",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "ZeroAmount",
+    inputs: [],
   },
 ] as const;
 
