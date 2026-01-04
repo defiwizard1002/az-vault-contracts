@@ -178,7 +178,7 @@ const _abi = [
     name: "batchFlushWithdrawals",
     inputs: [
       {
-        name: "ids",
+        name: "withdrawalIds",
         type: "uint256[]",
         internalType: "uint256[]",
       },
@@ -203,6 +203,11 @@ const _abi = [
         name: "validatorSignatures",
         type: "bytes[]",
         internalType: "bytes[]",
+      },
+      {
+        name: "nonce",
+        type: "uint256",
+        internalType: "uint256",
       },
     ],
     outputs: [],
@@ -239,6 +244,11 @@ const _abi = [
         type: "bytes[]",
         internalType: "bytes[]",
       },
+      {
+        name: "nonce",
+        type: "uint256",
+        internalType: "uint256",
+      },
     ],
     outputs: [],
     stateMutability: "nonpayable",
@@ -248,7 +258,7 @@ const _abi = [
     name: "batchTogglePendingWithdrawal",
     inputs: [
       {
-        name: "ids",
+        name: "withdrawalIds",
         type: "uint256[]",
         internalType: "uint256[]",
       },
@@ -279,6 +289,11 @@ const _abi = [
         type: "bytes[]",
         internalType: "bytes[]",
       },
+      {
+        name: "nonce",
+        type: "uint256",
+        internalType: "uint256",
+      },
     ],
     outputs: [],
     stateMutability: "nonpayable",
@@ -288,7 +303,7 @@ const _abi = [
     name: "executePendingWithdrawal",
     inputs: [
       {
-        name: "id",
+        name: "withdrawalId",
         type: "uint256",
         internalType: "uint256",
       },
@@ -313,6 +328,11 @@ const _abi = [
         name: "validatorSignatures",
         type: "bytes[]",
         internalType: "bytes[]",
+      },
+      {
+        name: "nonce",
+        type: "uint256",
+        internalType: "uint256",
       },
     ],
     outputs: [],
@@ -410,6 +430,25 @@ const _abi = [
     ],
     outputs: [],
     stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "nonceUsed",
+    inputs: [
+      {
+        name: "",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
+    outputs: [
+      {
+        name: "",
+        type: "bool",
+        internalType: "bool",
+      },
+    ],
+    stateMutability: "view",
   },
   {
     type: "function",
@@ -537,7 +576,7 @@ const _abi = [
     name: "requestWithdraw",
     inputs: [
       {
-        name: "id",
+        name: "withdrawalId",
         type: "uint256",
         internalType: "uint256",
       },
@@ -594,6 +633,11 @@ const _abi = [
         name: "validatorSignatures",
         type: "bytes[]",
         internalType: "bytes[]",
+      },
+      {
+        name: "nonce",
+        type: "uint256",
+        internalType: "uint256",
       },
     ],
     outputs: [],
@@ -890,7 +934,7 @@ const _abi = [
     name: "PendingWithdrawalToggled",
     inputs: [
       {
-        name: "id",
+        name: "withdrawalId",
         type: "uint256",
         indexed: false,
         internalType: "uint256",
@@ -900,6 +944,12 @@ const _abi = [
         type: "bool",
         indexed: false,
         internalType: "bool",
+      },
+      {
+        name: "nonce",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
       },
     ],
     anonymous: false,
@@ -1117,7 +1167,7 @@ const _abi = [
     name: "WithdrawExecuted",
     inputs: [
       {
-        name: "id",
+        name: "withdrawalId",
         type: "uint256",
         indexed: false,
         internalType: "uint256",
@@ -1163,6 +1213,12 @@ const _abi = [
         type: "bool",
         indexed: false,
         internalType: "bool",
+      },
+      {
+        name: "nonce",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
       },
     ],
     anonymous: false,
@@ -1228,7 +1284,7 @@ const _abi = [
     name: "WithdrawalAdded",
     inputs: [
       {
-        name: "id",
+        name: "withdrawalId",
         type: "uint256",
         indexed: false,
         internalType: "uint256",
@@ -1269,6 +1325,12 @@ const _abi = [
         indexed: false,
         internalType: "bool",
       },
+      {
+        name: "nonce",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
     ],
     anonymous: false,
   },
@@ -1303,11 +1365,6 @@ const _abi = [
         internalType: "address",
       },
     ],
-  },
-  {
-    type: "error",
-    name: "AmountMismatch",
-    inputs: [],
   },
   {
     type: "error",
@@ -1420,6 +1477,11 @@ const _abi = [
   },
   {
     type: "error",
+    name: "NonceAlreadyUsed",
+    inputs: [],
+  },
+  {
+    type: "error",
     name: "NotEnoughValidatorPower",
     inputs: [],
   },
@@ -1488,16 +1550,6 @@ const _abi = [
   {
     type: "error",
     name: "ValidatorsNotSet",
-    inputs: [],
-  },
-  {
-    type: "error",
-    name: "ValueMismatch",
-    inputs: [],
-  },
-  {
-    type: "error",
-    name: "ValueNotZero",
     inputs: [],
   },
   {

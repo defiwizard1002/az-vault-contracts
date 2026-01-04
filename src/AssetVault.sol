@@ -71,9 +71,6 @@ contract AssetVault is
     error TokensAndAmountsLengthMismatch();
     error TokenAlreadyExists();
     error ZeroAmount();
-    error ValueMismatch();
-    error ValueNotZero();
-    error AmountMismatch();
     error EmptyIds();
     error ChallengePeriodNotExpired();
     error ChallengePeriodExpired();
@@ -87,6 +84,7 @@ contract AssetVault is
     error TokenNotSupported();
     error WithdrawalExistenceCheckFailed();
     error WithdrawalAlreadyExecuted();
+    error NonceAlreadyUsed();
 
     bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
     bytes32 public constant TOKEN_ROLE = keccak256("TOKEN_ROLE");
@@ -106,6 +104,8 @@ contract AssetVault is
     mapping(bytes32 => uint256) public availableValidators;
 
     mapping(address => uint256) public fees;
+
+    mapping(uint256 => bool) public nonceUsed;
 
     event DepositETH(address account, uint256 amount);
 
@@ -133,17 +133,18 @@ contract AssetVault is
         bool forcePending
     );
     event WithdrawalAdded(
-        uint256 id,
+        uint256 withdrawalId,
         address token,
         uint256 amount,
         uint256 fee,
         address receiver,
         bool isPending,
-        bool isForcePending
+        bool isForcePending,
+        uint256 nonce
     );
 
     event WithdrawExecuted(
-        uint256 id,
+        uint256 withdrawalId,
         address to,
         address token,
         uint256 amount,
@@ -153,9 +154,14 @@ contract AssetVault is
         // Whether the withdrawal is flushed
         bool isFlushed,
         // Whether the withdrawal is paused when executed
-        bool isPaused
+        bool isPaused,
+        uint256 nonce
     );
-    event PendingWithdrawalToggled(uint256 id, bool paused);
+    event PendingWithdrawalToggled(
+        uint256 withdrawalId, 
+        bool paused,
+        uint256 nonce
+    );
 
     event ValidatorsAdded(bytes32 hash, uint256 count, uint256 totalPower);
     event ValidatorsRemoved(bytes32 hash, uint256 count);
@@ -295,44 +301,54 @@ contract AssetVault is
         emit DepositETH(msg.sender, msg.value);
     }
 
+    struct RequestWithdrawLocalVars {
+        bytes32 digest;
+        bool isPending;
+    }
+
     function requestWithdraw(
-        uint256 id,
+        uint256 withdrawalId,
         bool isForcePending,
         ValidatorInfo[] calldata validators,
         WithdrawAction calldata action,
-        bytes[] calldata validatorSignatures
+        bytes[] calldata validatorSignatures,
+        uint256 nonce
     ) external payable whenNotPaused onlyRole(OPERATOR_ROLE) nonReentrant {
+        RequestWithdrawLocalVars memory vars;
+
+        _nonceUsedCheckAndSet(nonce);
         _ensureTokenSupported(action.token);
         _refillWithdrawHotAmount(action.token);
-        _checkWithdrawalExists(id, false);
+        _checkWithdrawalExists(withdrawalId, false);
 
-        bytes32 digest = keccak256(
+        vars.digest = keccak256(
             abi.encode(
                 "requestWithdraw",
-                id,
+                withdrawalId,
                 block.chainid,
                 address(this),
                 action.token,
                 action.amount,
                 action.fee,
                 action.receiver,
-                isForcePending
+                isForcePending,
+                nonce
             )
         );
 
-        _verifyValidatorSignature(validators, digest, validatorSignatures);
+        _verifyValidatorSignature(validators, vars.digest, validatorSignatures);
 
-        bool isPending = isForcePending;
+        vars.isPending = isForcePending;
         if (!isForcePending) {
             // when normal withdrawal triggers hard cap exceeded, fallback to pending mode
-            isPending = _increaseUsedWithdrawHotAmount(
+            vars.isPending = _increaseUsedWithdrawHotAmount(
                 supportedTokens[action.token],
                 action.amount
             );
         }
-        withdrawals[id] = Withdrawal(
+        withdrawals[withdrawalId] = Withdrawal(
             false,
-            isPending,
+            vars.isPending,
             false,
             action.amount,
             action.token,
@@ -341,47 +357,51 @@ contract AssetVault is
             block.timestamp
         );
         emit WithdrawalAdded(
-            id,
+            withdrawalId,
             action.token,
             action.amount,
             action.fee,
             action.receiver,
-            isPending,
-            isForcePending
+            vars.isPending,
+            isForcePending,
+            nonce
         );
-        if (!isPending) {
-            _executeWithdrawal(id, isPending, false, false);
+        if (!vars.isPending) {
+            _executeWithdrawal(withdrawalId, false, false, false, nonce);
         }
     }
 
     function batchTogglePendingWithdrawal(
-        uint256[] calldata ids,
+        uint256[] calldata withdrawalIds,
         bool shouldPause,
         ValidatorInfo[] calldata validators,
-        bytes[] calldata validatorSignatures
+        bytes[] calldata validatorSignatures,
+        uint256 nonce
     ) external whenNotPaused onlyRole(OPERATOR_ROLE) nonReentrant {
-        if (ids.length == 0) {
+        if (withdrawalIds.length == 0) {
             revert EmptyIds();
         }
+        _nonceUsedCheckAndSet(nonce);
         bytes32 digest = keccak256(
             abi.encode(
                 "batchTogglePendingWithdrawal",
-                ids,
+                withdrawalIds,
                 block.chainid,
                 address(this),
-                shouldPause
+                shouldPause,
+                nonce
             )
         );
 
         _verifyValidatorSignature(validators, digest, validatorSignatures);
 
-        for (uint256 i = 0; i < ids.length; i++) {
-            Withdrawal storage withdrawal = withdrawals[ids[i]];
+        for (uint256 i = 0; i < withdrawalIds.length; i++) {
+            Withdrawal storage withdrawal = withdrawals[withdrawalIds[i]];
             _refillWithdrawHotAmount(withdrawal.token);
             // 1. executed withdrawal cannot be paused/unpaused
             // 2. pending withdrawal cannot be paused/unpaused if challenge period is expired
-            _checkWithdrawalNotExecuted(ids[i]);
-            _checkWithdrawalPending(ids[i]);
+            _checkWithdrawalNotExecuted(withdrawalIds[i]);
+            _checkWithdrawalPending(withdrawalIds[i]);
             if (block.timestamp >= withdrawal.timestamp + pendingWithdrawChallengePeriod) {
                 revert ChallengePeriodExpired();
             }
@@ -389,82 +409,89 @@ contract AssetVault is
                 revert WithdrawAlreadyInDesiredState();
             }
             withdrawal.paused = shouldPause;
-            emit PendingWithdrawalToggled(ids[i], shouldPause);
+            emit PendingWithdrawalToggled(withdrawalIds[i], shouldPause, nonce);
         }
     }
 
     function executePendingWithdrawal(
-        uint256 id,
+        uint256 withdrawalId,
         ValidatorInfo[] calldata validators,
-        bytes[] calldata validatorSignatures
+        bytes[] calldata validatorSignatures,
+        uint256 nonce
     ) external whenNotPaused onlyRole(OPERATOR_ROLE) nonReentrant {
+        _nonceUsedCheckAndSet(nonce);
         bytes32 digest = keccak256(
             abi.encode(
                 "executePendingWithdrawal",
-                id,
+                withdrawalId,
                 block.chainid,
-                address(this)
+                address(this),
+                nonce
             )
         );
         _verifyValidatorSignature(validators, digest, validatorSignatures);
-        _checkWithdrawalExists(id, true);
-        _checkWithdrawalNotExecuted(id);
-        Withdrawal storage withdrawal = withdrawals[id];
+        _checkWithdrawalExists(withdrawalId, true);
+        _checkWithdrawalNotExecuted(withdrawalId);
+        Withdrawal storage withdrawal = withdrawals[withdrawalId];
         _refillWithdrawHotAmount(withdrawal.token);
+        _checkWithdrawalPending(withdrawalId);
         if (withdrawal.paused) {
             revert WithdrawalPaused();
-        }
-        if (!withdrawal.pending) {
-            revert WithdrawalMustBePending();
         }
         if (block.timestamp < withdrawal.timestamp + pendingWithdrawChallengePeriod) {
             revert ChallengePeriodNotExpired();
         }
-        _executeWithdrawal(id, withdrawal.pending, false, withdrawal.paused);
+        _executeWithdrawal(withdrawalId, true, false, false, nonce);
     }
 
     // No matter the withdrawal is pending or not, paused or not, it will be executed when flushing
     function batchFlushWithdrawals(
-        uint256[] calldata ids,
+        uint256[] calldata withdrawalIds,
         ValidatorInfo[] calldata validators,
-        bytes[] calldata validatorSignatures
+        bytes[] calldata validatorSignatures,
+        uint256 nonce
     ) external whenNotPaused onlyRole(OPERATOR_ROLE) nonReentrant {
-        if (ids.length == 0) {
+        if (withdrawalIds.length == 0) {
             revert EmptyIds();
         }
+        _nonceUsedCheckAndSet(nonce);
         bytes32 digest = keccak256(
             abi.encode(
                 "batchFlushWithdrawals",
-                ids,
+                withdrawalIds,
                 block.chainid,
-                address(this)
+                address(this),
+                nonce
             )
         );
         _verifyValidatorSignature(validators, digest, validatorSignatures);
-        for (uint256 i = 0; i < ids.length; i++) {
-            uint256 id = ids[i];
-            _checkWithdrawalExists(id, true);
-            _checkWithdrawalNotExecuted(id);
-            Withdrawal storage withdrawal = withdrawals[id];
+        for (uint256 i = 0; i < withdrawalIds.length; i++) {
+            uint256 withdrawalId = withdrawalIds[i];
+            _checkWithdrawalExists(withdrawalId, true);
+            _checkWithdrawalNotExecuted(withdrawalId);
+            Withdrawal storage withdrawal = withdrawals[withdrawalId];
             _refillWithdrawHotAmount(withdrawal.token);
-            _executeWithdrawal(id, withdrawal.pending, true, withdrawal.paused);
+            _executeWithdrawal(withdrawalId, withdrawal.pending, true, withdrawal.paused, nonce);
         }
     }
 
     function batchResetWithdrawHotAmount(
         address[] calldata tokens,
         ValidatorInfo[] calldata validators,
-        bytes[] calldata validatorSignatures
+        bytes[] calldata validatorSignatures,
+        uint256 nonce
     ) external whenNotPaused onlyRole(OPERATOR_ROLE) nonReentrant {
         if (tokens.length == 0) {
             revert EmptyTokens();
         }
+        _nonceUsedCheckAndSet(nonce);
         bytes32 digest = keccak256(
             abi.encode(
                 "batchResetWithdrawHotAmount",
                 tokens,
                 block.chainid,
-                address(this)
+                address(this),
+                nonce
             )
         );
         _verifyValidatorSignature(validators, digest, validatorSignatures);
@@ -585,12 +612,13 @@ contract AssetVault is
     }
 
     function _executeWithdrawal(
-        uint256 id,
+        uint256 withdrawalId,
         bool isPending,
         bool isFlushed,
-        bool isPaused
+        bool isPaused,
+        uint256 nonce
     ) internal {
-        Withdrawal storage withdrawal = withdrawals[id];
+        Withdrawal storage withdrawal = withdrawals[withdrawalId];
         _transfer(
             payable(withdrawal.receiver),
             withdrawal.token,
@@ -599,14 +627,15 @@ contract AssetVault is
         );
         withdrawal.executed = true;
         emit WithdrawExecuted(
-            id,
+            withdrawalId,
             withdrawal.receiver,
             withdrawal.token,
             withdrawal.amount,
             withdrawal.fee,
             isPending,
             isFlushed,
-            isPaused
+            isPaused,
+            nonce
         );
     }
 
@@ -614,6 +643,13 @@ contract AssetVault is
         if (supportedTokens[token].hardCapRatioBps == 0) {
             revert TokenNotSupported();
         }
+    }
+
+    function _nonceUsedCheckAndSet(uint256 nonce) internal {
+        if (nonceUsed[nonce]) {
+            revert NonceAlreadyUsed();
+        }
+        nonceUsed[nonce] = true;
     }
 
     function _checkWithdrawalExists(

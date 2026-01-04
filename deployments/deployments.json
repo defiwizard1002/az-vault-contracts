@@ -1,15 +1,15 @@
 {
   "11155111": {
     "AssetVault": {
-      "address": "0xf1e7b4be9ed4cbd4b7d8337cfc8ad75670ab7f92",
+      "address": "0x34a5da0b578b94112b36ae7294a975f35f983450",
       "contractName": "AssetVault"
     },
     "AssetVaultProxy": {
-      "address": "0x5de4c4b3adcd59104da8bb610e49202993207ad0",
+      "address": "0x021c58155203d27d5a26b531c28167b4692b32f9",
       "contractName": "AssetVaultProxy"
     },
     "MockERC20": {
-      "address": "0xbf757e944600d1e740a8b3f95eaa320df25b16ef",
+      "address": "0x341a062257fc0a1754ca7b32ec642713e7d4b26e",
       "contractName": "MockERC20"
     }
   }

@@ -172,7 +172,7 @@
       "name": "batchFlushWithdrawals",
       "inputs": [
         {
-          "name": "ids",
+          "name": "withdrawalIds",
           "type": "uint256[]",
           "internalType": "uint256[]"
         },
@@ -197,6 +197,11 @@
           "name": "validatorSignatures",
           "type": "bytes[]",
           "internalType": "bytes[]"
+        },
+        {
+          "name": "nonce",
+          "type": "uint256",
+          "internalType": "uint256"
         }
       ],
       "outputs": [],
@@ -232,6 +237,11 @@
           "name": "validatorSignatures",
           "type": "bytes[]",
           "internalType": "bytes[]"
+        },
+        {
+          "name": "nonce",
+          "type": "uint256",
+          "internalType": "uint256"
         }
       ],
       "outputs": [],
@@ -242,7 +252,7 @@
       "name": "batchTogglePendingWithdrawal",
       "inputs": [
         {
-          "name": "ids",
+          "name": "withdrawalIds",
           "type": "uint256[]",
           "internalType": "uint256[]"
         },
@@ -272,6 +282,11 @@
           "name": "validatorSignatures",
           "type": "bytes[]",
           "internalType": "bytes[]"
+        },
+        {
+          "name": "nonce",
+          "type": "uint256",
+          "internalType": "uint256"
         }
       ],
       "outputs": [],
@@ -282,7 +297,7 @@
       "name": "executePendingWithdrawal",
       "inputs": [
         {
-          "name": "id",
+          "name": "withdrawalId",
           "type": "uint256",
           "internalType": "uint256"
         },
@@ -307,6 +322,11 @@
           "name": "validatorSignatures",
           "type": "bytes[]",
           "internalType": "bytes[]"
+        },
+        {
+          "name": "nonce",
+          "type": "uint256",
+          "internalType": "uint256"
         }
       ],
       "outputs": [],
@@ -404,6 +424,25 @@
       ],
       "outputs": [],
       "stateMutability": "nonpayable"
+    },
+    {
+      "type": "function",
+      "name": "nonceUsed",
+      "inputs": [
+        {
+          "name": "",
+          "type": "uint256",
+          "internalType": "uint256"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "",
+          "type": "bool",
+          "internalType": "bool"
+        }
+      ],
+      "stateMutability": "view"
     },
     {
       "type": "function",
@@ -531,7 +570,7 @@
       "name": "requestWithdraw",
       "inputs": [
         {
-          "name": "id",
+          "name": "withdrawalId",
           "type": "uint256",
           "internalType": "uint256"
         },
@@ -588,6 +627,11 @@
           "name": "validatorSignatures",
           "type": "bytes[]",
           "internalType": "bytes[]"
+        },
+        {
+          "name": "nonce",
+          "type": "uint256",
+          "internalType": "uint256"
         }
       ],
       "outputs": [],
@@ -884,7 +928,7 @@
       "name": "PendingWithdrawalToggled",
       "inputs": [
         {
-          "name": "id",
+          "name": "withdrawalId",
           "type": "uint256",
           "indexed": false,
           "internalType": "uint256"
@@ -894,6 +938,12 @@
           "type": "bool",
           "indexed": false,
           "internalType": "bool"
+        },
+        {
+          "name": "nonce",
+          "type": "uint256",
+          "indexed": false,
+          "internalType": "uint256"
         }
       ],
       "anonymous": false
@@ -1111,7 +1161,7 @@
       "name": "WithdrawExecuted",
       "inputs": [
         {
-          "name": "id",
+          "name": "withdrawalId",
           "type": "uint256",
           "indexed": false,
           "internalType": "uint256"
@@ -1157,6 +1207,12 @@
           "type": "bool",
           "indexed": false,
           "internalType": "bool"
+        },
+        {
+          "name": "nonce",
+          "type": "uint256",
+          "indexed": false,
+          "internalType": "uint256"
         }
       ],
       "anonymous": false
@@ -1222,7 +1278,7 @@
       "name": "WithdrawalAdded",
       "inputs": [
         {
-          "name": "id",
+          "name": "withdrawalId",
           "type": "uint256",
           "indexed": false,
           "internalType": "uint256"
@@ -1262,6 +1318,12 @@
           "type": "bool",
           "indexed": false,
           "internalType": "bool"
+        },
+        {
+          "name": "nonce",
+          "type": "uint256",
+          "indexed": false,
+          "internalType": "uint256"
         }
       ],
       "anonymous": false
@@ -1297,11 +1359,6 @@
           "internalType": "address"
         }
       ]
-    },
-    {
-      "type": "error",
-      "name": "AmountMismatch",
-      "inputs": []
     },
     {
       "type": "error",
@@ -1414,6 +1471,11 @@
     },
     {
       "type": "error",
+      "name": "NonceAlreadyUsed",
+      "inputs": []
+    },
+    {
+      "type": "error",
       "name": "NotEnoughValidatorPower",
       "inputs": []
     },
@@ -1482,16 +1544,6 @@
     {
       "type": "error",
       "name": "ValidatorsNotSet",
-      "inputs": []
-    },
-    {
-      "type": "error",
-      "name": "ValueMismatch",
-      "inputs": []
-    },
-    {
-      "type": "error",
-      "name": "ValueNotZero",
       "inputs": []
     },
     {

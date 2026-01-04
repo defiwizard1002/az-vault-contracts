@@ -254,11 +254,12 @@ contract AssetVaultTest is Test {
             withdrawAmount,
             0,
             receiver,
-            false
+            false,
+            1000
         );
 
         vm.prank(operator);
-        vault.requestWithdraw(id, false, data.validators, data.action, data.signatures);
+        vault.requestWithdraw(id, false, data.validators, data.action, data.signatures, data.nonce);
 
         implementationV2 = new AssetVaultV2();
         vm.prank(upgradeRole);
@@ -348,15 +349,16 @@ contract AssetVaultTest is Test {
             amount,
             fee,
             receiver,
-            false
+            false,
+            1001
         );
 
         (, , , , uint256 usedBefore) = vault.supportedTokens(address(token1));
         vm.expectEmit(true, true, true, true);
-        emit AssetVault.WithdrawExecuted(id, receiver, address(token1), amount, fee, false, false, false);
+        emit AssetVault.WithdrawExecuted(id, receiver, address(token1), amount, fee, false, false, false, data.nonce);
 
         vm.prank(operator);
-        vault.requestWithdraw(id, false, data.validators, data.action, data.signatures);
+        vault.requestWithdraw(id, false, data.validators, data.action, data.signatures, data.nonce);
 
         assertEq(token1.balanceOf(receiver), amount - fee);
         assertEq(vault.fees(address(token1)), fee);
@@ -383,14 +385,15 @@ contract AssetVaultTest is Test {
             amount,
             0,
             receiver,
-            false
+            false,
+            1002
         );
         (, , , , uint256 usedBefore) = vault.supportedTokens(address(token1));
         vm.expectEmit(true, true, true, true);
-        emit AssetVault.WithdrawalAdded(id, address(token1), amount, 0, receiver, true, false);
+        emit AssetVault.WithdrawalAdded(id, address(token1), amount, 0, receiver, true, false, data.nonce);
 
         vm.prank(operator);
-        vault.requestWithdraw(id, false, data.validators, data.action, data.signatures);
+        vault.requestWithdraw(id, false, data.validators, data.action, data.signatures, data.nonce);
 
         (, , , , uint256 usedAfter) = vault.supportedTokens(address(token1));
         assertEq(usedAfter, usedBefore);
@@ -399,10 +402,10 @@ contract AssetVaultTest is Test {
         assertFalse(executed);
         assertEq(withdrawalAmount, amount);
 
-        (ValidatorInfo[] memory execValidators, bytes[] memory execSignatures) = _prepareExecuteWithdrawalData(id);
+        (ValidatorInfo[] memory execValidators, bytes[] memory execSignatures) = _prepareExecuteWithdrawalData(id, 1003);
         vm.expectRevert(AssetVault.ChallengePeriodNotExpired.selector);
         vm.prank(operator);
-        vault.executePendingWithdrawal(id, execValidators, execSignatures);
+        vault.executePendingWithdrawal(id, execValidators, execSignatures, 1003);
     }
 
     function test_ForcePendingWithdraw() public {
@@ -420,15 +423,16 @@ contract AssetVaultTest is Test {
             amount,
             0,
             receiver,
-            true
+            true,
+            1004
         );
 
         (, , , , uint256 usedBefore) = vault.supportedTokens(address(token1));
         vm.expectEmit(true, true, true, true);
-        emit AssetVault.WithdrawalAdded(id, address(token1), amount, 0, receiver, true, true);
+        emit AssetVault.WithdrawalAdded(id, address(token1), amount, 0, receiver, true, true, data.nonce);
 
         vm.prank(operator);
-        vault.requestWithdraw(id, true, data.validators, data.action, data.signatures);
+        vault.requestWithdraw(id, true, data.validators, data.action, data.signatures, data.nonce);
 
         (, , , , uint256 usedAfter) = vault.supportedTokens(address(token1));
         assertEq(usedAfter, usedBefore);
@@ -436,10 +440,10 @@ contract AssetVaultTest is Test {
         assertTrue(pending);
         assertFalse(executed);
 
-        (ValidatorInfo[] memory execValidators, bytes[] memory execSignatures) = _prepareExecuteWithdrawalData(id);
+        (ValidatorInfo[] memory execValidators, bytes[] memory execSignatures) = _prepareExecuteWithdrawalData(id, 1005);
         vm.expectRevert(AssetVault.ChallengePeriodNotExpired.selector);
         vm.prank(operator);
-        vault.executePendingWithdrawal(id, execValidators, execSignatures);
+        vault.executePendingWithdrawal(id, execValidators, execSignatures, 1005);
     }
 
     function test_PauseWithdraw_OnlyPendingNotExpired() public {
@@ -458,30 +462,31 @@ contract AssetVaultTest is Test {
             amount,
             0,
             receiver,
-            false
+            false,
+            1006
         );
 
         vm.prank(operator);
-        vault.requestWithdraw(id, false, data.validators, data.action, data.signatures);
+        vault.requestWithdraw(id, false, data.validators, data.action, data.signatures, data.nonce);
 
         uint256[] memory ids = new uint256[](1);
         ids[0] = id;
-        (ValidatorInfo[] memory pauseValidators, bytes[] memory pauseSignatures) = _prepareBatchTogglePendingWithdrawalData(ids, true);
+        (ValidatorInfo[] memory pauseValidators, bytes[] memory pauseSignatures) = _prepareBatchTogglePendingWithdrawalData(ids, true, 1007);
 
         vm.expectEmit(true, false, false, true);
-        emit AssetVault.PendingWithdrawalToggled(id, true);
+        emit AssetVault.PendingWithdrawalToggled(id, true, 1007);
         vm.prank(operator);
-        vault.batchTogglePendingWithdrawal(ids, true, pauseValidators, pauseSignatures);
+        vault.batchTogglePendingWithdrawal(ids, true, pauseValidators, pauseSignatures, 1007);
 
         (bool paused, , , , , , , ) = vault.withdrawals(id);
         assertTrue(paused);
 
-        (ValidatorInfo[] memory unpauseValidators, bytes[] memory unpauseSignatures) = _prepareBatchTogglePendingWithdrawalData(ids, false);
+        (ValidatorInfo[] memory unpauseValidators, bytes[] memory unpauseSignatures) = _prepareBatchTogglePendingWithdrawalData(ids, false, 1008);
 
         vm.expectEmit(true, false, false, true);
-        emit AssetVault.PendingWithdrawalToggled(id, false);
+        emit AssetVault.PendingWithdrawalToggled(id, false, 1008);
         vm.prank(operator);
-        vault.batchTogglePendingWithdrawal(ids, false, unpauseValidators, unpauseSignatures);
+        vault.batchTogglePendingWithdrawal(ids, false, unpauseValidators, unpauseSignatures, 1008);
 
         (bool paused2, , , , , , , ) = vault.withdrawals(id);
         assertFalse(paused2);
@@ -502,22 +507,23 @@ contract AssetVaultTest is Test {
             amount,
             0,
             receiver,
-            false
+            false,
+            1009
         );
 
         vm.prank(operator);
-        vault.requestWithdraw(id, false, data.validators, data.action, data.signatures);
+        vault.requestWithdraw(id, false, data.validators, data.action, data.signatures, data.nonce);
 
         (, , bool executed, , , , , ) = vault.withdrawals(id);
         assertTrue(executed);
 
         uint256[] memory ids = new uint256[](1);
         ids[0] = id;
-        (ValidatorInfo[] memory pauseValidators, bytes[] memory pauseSignatures) = _prepareBatchTogglePendingWithdrawalData(ids, true);
+        (ValidatorInfo[] memory pauseValidators, bytes[] memory pauseSignatures) = _prepareBatchTogglePendingWithdrawalData(ids, true, 1010);
 
         vm.expectRevert(AssetVault.WithdrawalAlreadyExecuted.selector);
         vm.prank(operator);
-        vault.batchTogglePendingWithdrawal(ids, true, pauseValidators, pauseSignatures);
+        vault.batchTogglePendingWithdrawal(ids, true, pauseValidators, pauseSignatures, 1010);
     }
 
     function test_PendingWithdraw_ExecuteAfterChallengePeriod() public {
@@ -537,21 +543,22 @@ contract AssetVaultTest is Test {
             amount,
             fee,
             receiver,
-            false
+            false,
+            1011
         );
 
         vm.prank(operator);
-        vault.requestWithdraw(id, false, data.validators, data.action, data.signatures);
+        vault.requestWithdraw(id, false, data.validators, data.action, data.signatures, data.nonce);
 
         vm.warp(block.timestamp + CHALLENGE_PERIOD + 1);
 
-        (ValidatorInfo[] memory execValidators, bytes[] memory execSignatures) = _prepareExecuteWithdrawalData(id);
+        (ValidatorInfo[] memory execValidators, bytes[] memory execSignatures) = _prepareExecuteWithdrawalData(id, 1012);
 
         vm.expectEmit(true, true, true, true);
-        emit AssetVault.WithdrawExecuted(id, receiver, address(token1), amount, fee, true, false, false);
+        emit AssetVault.WithdrawExecuted(id, receiver, address(token1), amount, fee, true, false, false, 1012);
 
         vm.prank(operator);
-        vault.executePendingWithdrawal(id, execValidators, execSignatures);
+        vault.executePendingWithdrawal(id, execValidators, execSignatures, 1012);
 
         assertEq(token1.balanceOf(receiver), amount - fee);
         assertEq(vault.fees(address(token1)), fee);
@@ -575,11 +582,12 @@ contract AssetVaultTest is Test {
             amount,
             0,
             receiver,
-            false
+            false,
+            1013
         );
 
         vm.prank(operator);
-        vault.requestWithdraw(id, false, data.validators, data.action, data.signatures);
+        vault.requestWithdraw(id, false, data.validators, data.action, data.signatures, data.nonce);
 
         (bool paused, bool pending, bool executed, , , , , ) = vault.withdrawals(id);
         assertTrue(pending && !executed && !paused);
@@ -588,10 +596,10 @@ contract AssetVaultTest is Test {
 
         uint256[] memory ids = new uint256[](1);
         ids[0] = id;
-        (ValidatorInfo[] memory pauseValidators, bytes[] memory pauseSignatures) = _prepareBatchTogglePendingWithdrawalData(ids, true);
+        (ValidatorInfo[] memory pauseValidators, bytes[] memory pauseSignatures) = _prepareBatchTogglePendingWithdrawalData(ids, true, 1014);
         vm.expectRevert(AssetVault.ChallengePeriodExpired.selector);
         vm.prank(operator);
-        vault.batchTogglePendingWithdrawal(ids, true, pauseValidators, pauseSignatures);
+        vault.batchTogglePendingWithdrawal(ids, true, pauseValidators, pauseSignatures, 1014);
     }
 
     function test_FlushWithdraw_PendingNotExpired_Success() public {
@@ -612,11 +620,12 @@ contract AssetVaultTest is Test {
             testData.amount,
             testData.fee,
             testData.receiver,
-            false
+            false,
+            1015
         );
 
         vm.prank(operator);
-        vault.requestWithdraw(testData.id, false, data.validators, data.action, data.signatures);
+        vault.requestWithdraw(testData.id, false, data.validators, data.action, data.signatures, data.nonce);
 
         (testData.paused, testData.pending, testData.executed, , , , , ) = vault.withdrawals(testData.id);
         assertTrue(testData.pending);
@@ -628,13 +637,13 @@ contract AssetVaultTest is Test {
 
         testData.ids = new uint256[](1);
         testData.ids[0] = testData.id;
-        (ValidatorInfo[] memory flushValidators, bytes[] memory flushSignatures) = _prepareBatchFlushWithdrawalsData(testData.ids);
+        (ValidatorInfo[] memory flushValidators, bytes[] memory flushSignatures) = _prepareBatchFlushWithdrawalsData(testData.ids, 1016);
 
         vm.expectEmit(true, true, true, true);
-        emit AssetVault.WithdrawExecuted(testData.id, testData.receiver, address(token1), testData.amount, testData.fee, true, true, false);
+        emit AssetVault.WithdrawExecuted(testData.id, testData.receiver, address(token1), testData.amount, testData.fee, true, true, false, 1016);
 
         vm.prank(operator);
-        vault.batchFlushWithdrawals(testData.ids, flushValidators, flushSignatures);
+        vault.batchFlushWithdrawals(testData.ids, flushValidators, flushSignatures, 1016);
 
         assertEq(token1.balanceOf(testData.receiver), testData.balanceBefore + testData.amount - testData.fee);
         assertEq(token1.balanceOf(address(vault)), testData.vaultBalanceBefore - testData.amount + testData.fee);
@@ -662,17 +671,18 @@ contract AssetVaultTest is Test {
             testData.amount,
             testData.fee,
             testData.receiver,
-            false
+            false,
+            1017
         );
 
         vm.prank(operator);
-        vault.requestWithdraw(testData.id, false, data.validators, data.action, data.signatures);
+        vault.requestWithdraw(testData.id, false, data.validators, data.action, data.signatures, data.nonce);
 
         testData.ids = new uint256[](1);
         testData.ids[0] = testData.id;
-        (ValidatorInfo[] memory pauseValidators, bytes[] memory pauseSignatures) = _prepareBatchTogglePendingWithdrawalData(testData.ids, true);
+        (ValidatorInfo[] memory pauseValidators, bytes[] memory pauseSignatures) = _prepareBatchTogglePendingWithdrawalData(testData.ids, true, 1018);
         vm.prank(operator);
-        vault.batchTogglePendingWithdrawal(testData.ids, true, pauseValidators, pauseSignatures);
+        vault.batchTogglePendingWithdrawal(testData.ids, true, pauseValidators, pauseSignatures, 1018);
 
         (testData.paused, testData.pending, testData.executed, , , , , ) = vault.withdrawals(testData.id);
         assertTrue(testData.pending && !testData.executed && testData.paused);
@@ -680,12 +690,12 @@ contract AssetVaultTest is Test {
         testData.balanceBefore = token1.balanceOf(testData.receiver);
         testData.vaultBalanceBefore = token1.balanceOf(address(vault));
 
-        (ValidatorInfo[] memory flushValidators, bytes[] memory flushSignatures) = _prepareBatchFlushWithdrawalsData(testData.ids);
+        (ValidatorInfo[] memory flushValidators, bytes[] memory flushSignatures) = _prepareBatchFlushWithdrawalsData(testData.ids, 1019);
         vm.expectEmit(true, true, true, true);
-        emit AssetVault.WithdrawExecuted(testData.id, testData.receiver, address(token1), testData.amount, testData.fee, true, true, true);
+        emit AssetVault.WithdrawExecuted(testData.id, testData.receiver, address(token1), testData.amount, testData.fee, true, true, true, 1019);
 
         vm.prank(operator);
-        vault.batchFlushWithdrawals(testData.ids, flushValidators, flushSignatures);
+        vault.batchFlushWithdrawals(testData.ids, flushValidators, flushSignatures, 1019);
 
         assertEq(token1.balanceOf(testData.receiver), testData.balanceBefore + testData.amount - testData.fee);
         assertEq(token1.balanceOf(address(vault)), testData.vaultBalanceBefore - testData.amount + testData.fee);
@@ -709,7 +719,8 @@ contract AssetVaultTest is Test {
             amount,
             0,
             receiver,
-            false
+            false,
+            1020
         );
 
         bytes memory correctSig = data.signatures[0];
@@ -720,9 +731,9 @@ contract AssetVaultTest is Test {
         wrongSig[0] = bytes1(uint8(wrongSig[0]) ^ 1);
         data.signatures[0] = wrongSig;
 
-        vm.expectRevert(AssetVault.NotEnoughValidatorPower.selector);
+        vm.expectRevert(ECDSA.ECDSAInvalidSignature.selector);
         vm.prank(operator);
-        vault.requestWithdraw(id, false, data.validators, data.action, data.signatures);
+        vault.requestWithdraw(id, false, data.validators, data.action, data.signatures, data.nonce);
     }
 
     function test_Withdraw_WrongSignature_ModifiedAction_Reverts() public {
@@ -740,23 +751,26 @@ contract AssetVaultTest is Test {
             amount + 1,
             0,
             receiver,
-            false
+            false,
+            1021
         );
 
+        uint256 correctNonce = 1022;
         bytes32 correctDigest = _createRequestWithdrawDigest(
             id,
             address(token1),
             amount,
             0,
             receiver,
-            false
+            false,
+            correctNonce
         );
         data.signatures[0] = _signDigest(correctDigest, validator2Key);
         data.signatures[1] = _signDigest(correctDigest, validator3Key);
 
         vm.expectRevert(AssetVault.NotEnoughValidatorPower.selector);
         vm.prank(operator);
-        vault.requestWithdraw(id, false, data.validators, data.action, data.signatures);
+        vault.requestWithdraw(id, false, data.validators, data.action, data.signatures, correctNonce);
     }
 
     function test_Withdraw_WrongSignature_WrongId_Reverts() public {
@@ -775,12 +789,13 @@ contract AssetVaultTest is Test {
             amount,
             0,
             receiver,
-            false
+            false,
+            1023
         );
 
         vm.expectRevert(AssetVault.NotEnoughValidatorPower.selector);
         vm.prank(operator);
-        vault.requestWithdraw(wrongId, false, data.validators, data.action, data.signatures);
+        vault.requestWithdraw(wrongId, false, data.validators, data.action, data.signatures, data.nonce);
     }
 
     struct WithdrawTestData {
@@ -788,6 +803,7 @@ contract AssetVaultTest is Test {
         bytes[] signatures;
         WithdrawAction action;
         bytes32 digest;
+        uint256 nonce;
     }
 
     struct FlushTestData {
@@ -845,9 +861,11 @@ contract AssetVaultTest is Test {
         uint256 amount,
         uint256 fee,
         address receiver,
-        bool isForcePending
+        bool isForcePending,
+        uint256 nonce
     ) internal view returns (WithdrawTestData memory data) {
-        data.digest = _createRequestWithdrawDigest(id, token, amount, fee, receiver, isForcePending);
+        data.nonce = nonce;
+        data.digest = _createRequestWithdrawDigest(id, token, amount, fee, receiver, isForcePending, data.nonce);
         data.validators = new ValidatorInfo[](3);
         data.validators[0] = ValidatorInfo({signer: validator1, power: 10});
         data.validators[1] = ValidatorInfo({signer: validator2, power: 20});
@@ -865,9 +883,10 @@ contract AssetVaultTest is Test {
     }
 
     function _prepareExecuteWithdrawalData(
-        uint256 id
+        uint256 id,
+        uint256 nonce
     ) internal view returns (ValidatorInfo[] memory validators, bytes[] memory signatures) {
-        bytes32 digest = _createExecuteWithdrawalDigest(id);
+        bytes32 digest = _createExecuteWithdrawalDigest(id, nonce);
         validators = new ValidatorInfo[](3);
         validators[0] = ValidatorInfo({signer: validator1, power: 10});
         validators[1] = ValidatorInfo({signer: validator2, power: 20});
@@ -879,9 +898,10 @@ contract AssetVaultTest is Test {
 
     function _prepareBatchTogglePendingWithdrawalData(
         uint256[] memory ids,
-        bool shouldPause
+        bool shouldPause,
+        uint256 nonce
     ) internal view returns (ValidatorInfo[] memory validators, bytes[] memory signatures) {
-        bytes32 digest = _createBatchTogglePendingWithdrawalDigest(ids, shouldPause);
+        bytes32 digest = _createBatchTogglePendingWithdrawalDigest(ids, shouldPause, nonce);
         validators = new ValidatorInfo[](3);
         validators[0] = ValidatorInfo({signer: validator1, power: 10});
         validators[1] = ValidatorInfo({signer: validator2, power: 20});
@@ -892,9 +912,10 @@ contract AssetVaultTest is Test {
     }
 
     function _prepareBatchFlushWithdrawalsData(
-        uint256[] memory ids
+        uint256[] memory ids,
+        uint256 nonce
     ) internal view returns (ValidatorInfo[] memory validators, bytes[] memory signatures) {
-        bytes32 digest = _createBatchFlushWithdrawalsDigest(ids);
+        bytes32 digest = _createBatchFlushWithdrawalsDigest(ids, nonce);
         validators = new ValidatorInfo[](3);
         validators[0] = ValidatorInfo({signer: validator1, power: 10});
         validators[1] = ValidatorInfo({signer: validator2, power: 20});
@@ -905,9 +926,10 @@ contract AssetVaultTest is Test {
     }
 
     function _prepareBatchResetWithdrawHotAmountData(
-        address[] memory tokens
+        address[] memory tokens,
+        uint256 nonce
     ) internal view returns (ValidatorInfo[] memory validators, bytes[] memory signatures) {
-        bytes32 digest = _createBatchResetWithdrawHotAmountDigest(tokens);
+        bytes32 digest = _createBatchResetWithdrawHotAmountDigest(tokens, nonce);
         validators = new ValidatorInfo[](3);
         validators[0] = ValidatorInfo({signer: validator1, power: 10});
         validators[1] = ValidatorInfo({signer: validator2, power: 20});
@@ -923,7 +945,8 @@ contract AssetVaultTest is Test {
         uint256 amount,
         uint256 fee,
         address receiver,
-        bool isForcePending
+        bool isForcePending,
+        uint256 nonce
     ) internal view returns (bytes32) {
         return keccak256(
             abi.encode(
@@ -935,27 +958,31 @@ contract AssetVaultTest is Test {
                 amount,
                 fee,
                 receiver,
-                isForcePending
+                isForcePending,
+                nonce
             )
         );
     }
 
     function _createExecuteWithdrawalDigest(
-        uint256 id
+        uint256 id,
+        uint256 nonce
     ) internal view returns (bytes32) {
         return keccak256(
             abi.encode(
                 "executePendingWithdrawal",
                 id,
                 block.chainid,
-                address(vault)
+                address(vault),
+                nonce
             )
         );
     }
 
     function _createBatchTogglePendingWithdrawalDigest(
         uint256[] memory ids,
-        bool shouldPause
+        bool shouldPause,
+        uint256 nonce
     ) internal view returns (bytes32) {
         return keccak256(
             abi.encode(
@@ -963,33 +990,38 @@ contract AssetVaultTest is Test {
                 ids,
                 block.chainid,
                 address(vault),
-                shouldPause
+                shouldPause,
+                nonce
             )
         );
     }
 
     function _createBatchFlushWithdrawalsDigest(
-        uint256[] memory ids
+        uint256[] memory ids,
+        uint256 nonce
     ) internal view returns (bytes32) {
         return keccak256(
             abi.encode(
                 "batchFlushWithdrawals",
                 ids,
                 block.chainid,
-                address(vault)
+                address(vault),
+                nonce
             )
         );
     }
 
     function _createBatchResetWithdrawHotAmountDigest(
-        address[] memory tokens
+        address[] memory tokens,
+        uint256 nonce
     ) internal view returns (bytes32) {
         return keccak256(
             abi.encode(
                 "batchResetWithdrawHotAmount",
                 tokens,
                 block.chainid,
-                address(vault)
+                address(vault),
+                nonce
             )
         );
     }
@@ -1023,7 +1055,8 @@ contract AssetVaultTest is Test {
             testData.amount1,
             testData.fee1,
             testData.receiver1,
-            false
+            false,
+            1024
         );
 
         WithdrawTestData memory data2 = _prepareRequestWithdrawData(
@@ -1032,13 +1065,14 @@ contract AssetVaultTest is Test {
             testData.amount2,
             testData.fee2,
             testData.receiver2,
-            false
+            false,
+            1025
         );
 
         vm.prank(operator);
-        vault.requestWithdraw(testData.id1, false, data1.validators, data1.action, data1.signatures);
+        vault.requestWithdraw(testData.id1, false, data1.validators, data1.action, data1.signatures, data1.nonce);
         vm.prank(operator);
-        vault.requestWithdraw(testData.id2, false, data2.validators, data2.action, data2.signatures);
+        vault.requestWithdraw(testData.id2, false, data2.validators, data2.action, data2.signatures, data2.nonce);
 
         (testData.paused1, testData.pending1, testData.executed1, , , , , ) = vault.withdrawals(testData.id1);
         (testData.paused2, testData.pending2, testData.executed2, , , , , ) = vault.withdrawals(testData.id2);
@@ -1057,15 +1091,17 @@ contract AssetVaultTest is Test {
         testData.ids = new uint256[](2);
         testData.ids[0] = testData.id1;
         testData.ids[1] = testData.id2;
-        (testData.validators, testData.signatures) = _prepareBatchFlushWithdrawalsData(testData.ids);
+        (ValidatorInfo[] memory batchFlushValidators, bytes[] memory batchFlushSignatures) = _prepareBatchFlushWithdrawalsData(testData.ids, 1026);
+        testData.validators = batchFlushValidators;
+        testData.signatures = batchFlushSignatures;
 
         vm.expectEmit(true, true, true, true);
-        emit AssetVault.WithdrawExecuted(testData.id1, testData.receiver1, address(token1), testData.amount1, testData.fee1, true, true, false);
+        emit AssetVault.WithdrawExecuted(testData.id1, testData.receiver1, address(token1), testData.amount1, testData.fee1, true, true, false, 1026);
         vm.expectEmit(true, true, true, true);
-        emit AssetVault.WithdrawExecuted(testData.id2, testData.receiver2, address(token1), testData.amount2, testData.fee2, true, true, false);
+        emit AssetVault.WithdrawExecuted(testData.id2, testData.receiver2, address(token1), testData.amount2, testData.fee2, true, true, false, 1026);
 
         vm.prank(operator);
-        vault.batchFlushWithdrawals(testData.ids, testData.validators, testData.signatures);
+        vault.batchFlushWithdrawals(testData.ids, testData.validators, testData.signatures, 1026);
 
         assertEq(token1.balanceOf(testData.receiver1), testData.balance1Before + testData.amount1 - testData.fee1);
         assertEq(token1.balanceOf(testData.receiver2), testData.balance2Before + testData.amount2 - testData.fee2);
@@ -1096,7 +1132,8 @@ contract AssetVaultTest is Test {
             amount1,
             0,
             receiver,
-            false
+            false,
+            1027
         );
 
         WithdrawTestData memory data2 = _prepareRequestWithdrawData(
@@ -1105,13 +1142,14 @@ contract AssetVaultTest is Test {
             amount2,
             0,
             receiver,
-            false
+            false,
+            1028
         );
 
         vm.prank(operator);
-        vault.requestWithdraw(id1, false, data1.validators, data1.action, data1.signatures);
+        vault.requestWithdraw(id1, false, data1.validators, data1.action, data1.signatures, data1.nonce);
         vm.prank(operator);
-        vault.requestWithdraw(id2, false, data2.validators, data2.action, data2.signatures);
+        vault.requestWithdraw(id2, false, data2.validators, data2.action, data2.signatures, data2.nonce);
 
         (, , , , uint256 used1Before) = vault.supportedTokens(address(token1));
         (, , , , uint256 used2Before) = vault.supportedTokens(address(token2));
@@ -1127,10 +1165,10 @@ contract AssetVaultTest is Test {
         address[] memory tokens = new address[](2);
         tokens[0] = address(token1);
         tokens[1] = address(token2);
-        (ValidatorInfo[] memory resetValidators, bytes[] memory resetSignatures) = _prepareBatchResetWithdrawHotAmountData(tokens);
+        (ValidatorInfo[] memory resetValidators, bytes[] memory resetSignatures) = _prepareBatchResetWithdrawHotAmountData(tokens, 1029);
 
         vm.prank(operator);
-        vault.batchResetWithdrawHotAmount(tokens, resetValidators, resetSignatures);
+        vault.batchResetWithdrawHotAmount(tokens, resetValidators, resetSignatures, 1029);
 
         (, , , , uint256 used1After) = vault.supportedTokens(address(token1));
         (, , , , uint256 used2After) = vault.supportedTokens(address(token2));
@@ -1141,20 +1179,20 @@ contract AssetVaultTest is Test {
     function test_BatchResetWithdrawHotAmount_OnlyOperator() public {
         address[] memory tokens = new address[](1);
         tokens[0] = address(token1);
-        (ValidatorInfo[] memory resetValidators, bytes[] memory resetSignatures) = _prepareBatchResetWithdrawHotAmountData(tokens);
+        (ValidatorInfo[] memory resetValidators, bytes[] memory resetSignatures) = _prepareBatchResetWithdrawHotAmountData(tokens, 1030);
         vm.expectRevert();
         vm.prank(admin);
-        vault.batchResetWithdrawHotAmount(tokens, resetValidators, resetSignatures);
+        vault.batchResetWithdrawHotAmount(tokens, resetValidators, resetSignatures, 1030);
     }
 
     function test_BatchResetWithdrawHotAmount_UnsupportedToken_Reverts() public {
         address unsupportedToken = address(0x999);
         address[] memory tokens = new address[](1);
         tokens[0] = unsupportedToken;
-        (ValidatorInfo[] memory resetValidators, bytes[] memory resetSignatures) = _prepareBatchResetWithdrawHotAmountData(tokens);
+        (ValidatorInfo[] memory resetValidators, bytes[] memory resetSignatures) = _prepareBatchResetWithdrawHotAmountData(tokens, 1031);
         vm.expectRevert(AssetVault.TokenNotSupported.selector);
         vm.prank(operator);
-        vault.batchResetWithdrawHotAmount(tokens, resetValidators, resetSignatures);
+        vault.batchResetWithdrawHotAmount(tokens, resetValidators, resetSignatures, 1031);
     }
 
     function test_BatchFlushWithdrawals_EmptyIds_Reverts() public {
@@ -1164,10 +1202,10 @@ contract AssetVaultTest is Test {
         validators[2] = ValidatorInfo({signer: validator3, power: 30});
 
         vm.expectRevert(AssetVault.EmptyIds.selector);
-        vm.prank(operator);
         uint256[] memory ids = new uint256[](0);
         bytes[] memory signatures = new bytes[](0);
-        vault.batchFlushWithdrawals(ids, validators, signatures);
+        vm.prank(operator);
+        vault.batchFlushWithdrawals(ids, validators, signatures, 1032);
     }
 
     function test_WithdrawFees_ERC20() public {
@@ -1186,11 +1224,12 @@ contract AssetVaultTest is Test {
             amount,
             fee,
             receiver,
-            false
+            false,
+            1033
         );
 
         vm.prank(operator);
-        vault.requestWithdraw(id, false, data.validators, data.action, data.signatures);
+        vault.requestWithdraw(id, false, data.validators, data.action, data.signatures, data.nonce);
 
         assertEq(vault.fees(address(token1)), fee);
 
@@ -1225,11 +1264,12 @@ contract AssetVaultTest is Test {
             amount,
             fee,
             receiver,
-            false
+            false,
+            1034
         );
 
         vm.prank(operator);
-        vault.requestWithdraw(id, false, data.validators, data.action, data.signatures);
+        vault.requestWithdraw(id, false, data.validators, data.action, data.signatures, data.nonce);
 
         assertEq(vault.fees(address(0)), fee);
 
@@ -1271,7 +1311,8 @@ contract AssetVaultTest is Test {
             amount1,
             fee1,
             receiver,
-            false
+            false,
+            1035
         );
 
         WithdrawTestData memory data2 = _prepareRequestWithdrawData(
@@ -1280,13 +1321,14 @@ contract AssetVaultTest is Test {
             amount2,
             fee2,
             receiver,
-            false
+            false,
+            1036
         );
 
         vm.prank(operator);
-        vault.requestWithdraw(id1, false, data1.validators, data1.action, data1.signatures);
+        vault.requestWithdraw(id1, false, data1.validators, data1.action, data1.signatures, data1.nonce);
         vm.prank(operator);
-        vault.requestWithdraw(id2, false, data2.validators, data2.action, data2.signatures);
+        vault.requestWithdraw(id2, false, data2.validators, data2.action, data2.signatures, data2.nonce);
 
         assertEq(vault.fees(address(token1)), fee1);
         assertEq(vault.fees(address(0)), fee2);
@@ -1310,4 +1352,3 @@ contract AssetVaultTest is Test {
         assertEq(vault.fees(address(0)), 0);
     }
 }
-
